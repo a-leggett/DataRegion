@@ -15,7 +15,8 @@ The `DataRegion` structure is the main structure of this API. It stores the firs
 Two DataRegions are considered adjacent if there is no gap between them. Specifically, if one DataRegion's `last index` is exactly one less than the other's `first index`, then the two are considered adjacent. The `are_data_regions_adjacent(DataRegion, DataRegion)` function can be used to determine whether two DataRegions are adjacent.
 
 #### Examples of adjacent DataRegions
-{ (1,1), (2,300) }
+
+{ (1,1), (2,300) }\
 { (0,3), (4,5) }
 
 ### Intersecting DataRegions
@@ -47,11 +48,11 @@ When two DataRegions are `adjacent` or `intersecting`, they can (and should) be 
 An array of `DataRegion`s is referred to by this document as a `set`. The functions in this API have certain expectations of sets. First, they must not have overlapping DataRegions. For example, you cannot have { (0,100), (25, 50) } since the (25,50) DataRegion is overlapped by (0, 100). Second, the DataRegions in a set must be sorted in ascending order. Third, there must not be adjacent DataRegions (instead, they should be combined; see the `Combining DataRegions` section above). The output of all functions in this API meets these requirements as long as the input does too.
 
 #### Examples of valid sets
-{ *Empty* }
-{ (0,0) }
-{ (1,2), (5,100) }
-{ (1,100) }
-{ (1,1), (5,9), (100,200), (400,400) }
+{ *Empty* }  \
+{ (0,0) }  \
+{ (1,2), (5,100) }  \
+{ (1,100) }  \
+{ (1,1), (5,9), (100,200), (400,400) }  
 
 #### Examples of *invalid* sets
 |    Set                        |              Explanation               |
