@@ -3,12 +3,21 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 typedef struct DataRegion
 {
   int64_t first_index;
   int64_t last_index;
 } DataRegion;
+
+typedef struct DataRegionSet
+{
+  DataRegion* regions;
+  int64_t count;
+  int64_t capacity;
+} DataRegionSet;
 
 bool does_data_region_contain_other_data_region(DataRegion outer, DataRegion inner)
 {
@@ -55,58 +64,54 @@ DataRegion combine_data_regions(DataRegion a, DataRegion b)
   return ret;
 }
 
-void internal_remove_data_region_at(DataRegion* regions, int64_t* regionCount, int64_t index)
+void internal_remove_data_region_at(DataRegionSet* set, int64_t index)
 {
-  assert(regions != NULL);
-  assert(*regionCount > 0);
-  assert(index < *regionCount);
+  assert(set != NULL);
+  assert(index >= 0);
+  assert(index < set->count);
 
   //Move all values 'up' after the remove index
-  for (int64_t i = index; i < (*regionCount) - 1; i++)
-    regions[i] = regions[i + 1];
+  for (int64_t i = index; i < set->count - 1; i++)
+    set->regions[i] = set->regions[i + 1];
 
-  (*regionCount)--;
+  set->count--;
 }
 
-void internal_insert_data_region_at(DataRegion* regions, int64_t* regionCount, DataRegion toInsert, int64_t index, int64_t capacity)
+void internal_insert_data_region_at(DataRegionSet* set, DataRegion toInsert, int64_t index)
 {
-  assert(regions != NULL);
-  assert(capacity > 0);
-  assert(*regionCount >= 0);
-  assert(*regionCount < capacity);
-  assert(index <= *regionCount);//Can insert at regionCount (like push_back)
-  assert(index < capacity);//Cannot insert at capacity
+  assert(set != NULL);
+  assert(is_data_region_valid(toInsert));
+  assert(index >= 0);
+  assert(set->count < set->capacity);
+  assert(index <= set->count);//index==count when adding to end
 
   //Move all values 'down' after the insert index
-  for (int64_t i = *regionCount; i > index; i--)
-    regions[i] = regions[i - 1];
+  for (int64_t i = set->count; i > index; i--)
+    set->regions[i] = set->regions[i - 1];
 
   //Insert the DataRegion to the specified index
-  regions[index] = toInsert;
-  (*regionCount)++;
+  set->regions[index] = toInsert;
+  set->count++;
 }
 
-bool add_data_region(DataRegion* regions, DataRegion toAdd, int64_t* count, int64_t capacity)
+bool add_data_region(DataRegionSet* set, DataRegion toAdd)
 {
-  assert(regions != NULL);
+  assert(set != NULL);
   assert(is_data_region_valid(toAdd));
-  assert(*count >= 0);
-  assert(capacity >= 0);
-  assert(*count <= capacity);//count==capacity is still potentially addable, count>capacity is an error
 
-  if (*count < capacity)
+  if (set->count < set->capacity)
   {
     int64_t insertPos = 0;
 
     //Find where to insert 'toAdd', and also remove any 'combinable' DataRegions
-    for (int64_t i = 0; i < *count; i++)
+    for (int64_t i = 0; i < set->count; i++)
     {
-      DataRegion current = regions[i];
+      DataRegion current = set->regions[i];
 
       if (can_combine_data_regions(current, toAdd))
       {
         //Remove this DataRegion since it will be combined with 'toAdd'
-        internal_remove_data_region_at(regions, count, i);
+        internal_remove_data_region_at(set, i);
         toAdd = combine_data_regions(current, toAdd);
         i--;//Since we removed a DataRegion
       }
@@ -121,7 +126,7 @@ bool add_data_region(DataRegion* regions, DataRegion toAdd, int64_t* count, int6
     }
 
     //Insert 'toAdd'
-    internal_insert_data_region_at(regions, count, toAdd, insertPos, capacity);
+    internal_insert_data_region_at(set, toAdd, insertPos);
     return true;
   }
   else
@@ -131,15 +136,12 @@ bool add_data_region(DataRegion* regions, DataRegion toAdd, int64_t* count, int6
   }
 }
 
-bool remove_data_region(DataRegion* regions, DataRegion toRemove, int64_t* count, int64_t capacity)
+bool remove_data_region(DataRegionSet* set, DataRegion toRemove)
 {
-  assert(regions != NULL);
+  assert(set != NULL);
   assert(is_data_region_valid(toRemove));
-  assert(*count >= 0);//count==0 just returns false, not assert fail
-  assert(capacity >= 0);//capacity==0 just returns false, not assert fail
-  assert(*count <= capacity);
 
-  if (*count == capacity)
+  if (set->count == set->capacity)
   {
     /* Oh no, we may not have enough memory to complete the remove operation!
       Consider the following example:
@@ -150,19 +152,19 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, int64_t* count
 
       We have to detect whether the above problem will happen in order to prevent it. */
     int64_t removeCount = 0, insertCount = 0;
-    for (int64_t i = 0; i < *count; i++)
+    for (int64_t i = 0; i < set->count; i++)
     {
-      if (do_data_regions_intersect(regions[i], toRemove))
+      if (do_data_regions_intersect(set->regions[i], toRemove))
       {
         removeCount++;
 
-        if (regions[i].first_index < toRemove.first_index)
+        if (set->regions[i].first_index < toRemove.first_index)
         {
           //The left portion of regions[i] will remain (so we will add it to 'regions')
           insertCount++;
         }
 
-        if (regions[i].last_index > toRemove.last_index)
+        if (set->regions[i].last_index > toRemove.last_index)
         {
           //The right portion of regions[i] will remain (so we will add it to 'regions')
           insertCount++;
@@ -173,7 +175,7 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, int64_t* count
       }
       else
       {
-        if (regions[i].first_index > toRemove.last_index)
+        if (set->regions[i].first_index > toRemove.last_index)
           break;//Done checking for intersections
       }
     }
@@ -186,32 +188,32 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, int64_t* count
   }
 
   //Remove all DataRegions within 'toRemove'
-  for (int64_t i = 0; i < *count; i++)
+  for (int64_t i = 0; i < set->count; i++)
   {
-    DataRegion currentRegion = regions[i];
+    DataRegion currentRegion = set->regions[i];
     if (do_data_regions_intersect(currentRegion, toRemove))
     {
-      internal_remove_data_region_at(regions, count, i);//Remove 'currentRegion'
+      internal_remove_data_region_at(set, i);//Remove 'currentRegion'
 
       if (currentRegion.first_index < toRemove.first_index)
       {
         //The left portion of 'currentRegion' will remain (so we will add it to 'regions')
         DataRegion leftPortion = { currentRegion.first_index, toRemove.first_index - 1 };
-        internal_insert_data_region_at(regions, count, leftPortion, i++, capacity);
+        internal_insert_data_region_at(set, leftPortion, i++);
       }
 
       if (currentRegion.last_index > toRemove.last_index)
       {
         //The right portion of 'currentRegion' will remain (so we will add it to 'regions')
         DataRegion rightPortion = { toRemove.last_index + 1, currentRegion.last_index };
-        internal_insert_data_region_at(regions, count, rightPortion, i++, capacity);
+        internal_insert_data_region_at(set, rightPortion, i++);
       }
 
       i--;//Since we removed 'currentRegion' (must do this AFTER potentially keeping left/right portions above)
     }
     else
     {
-      if (regions[i].first_index > toRemove.last_index)
+      if (set->regions[i].first_index > toRemove.last_index)
         break;//Done checking for intersections
     }
   }
@@ -219,12 +221,10 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, int64_t* count
   return true;
 }
 
-int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const DataRegion* src, int64_t srcCount, DataRegion boundaryRegion, bool* dstTooSmall)
+int64_t get_bounded_data_regions(DataRegionSet* dst, const DataRegionSet* src, DataRegion boundaryRegion, bool* dstTooSmall)
 {
-  //dst may be null if caller just wants to count
-  assert(dstCapacity >= 0);//dstCapacity==0 causes return 0, not error
+  //dst may be NULL if we're just counting the regions
   assert(src != NULL);
-  assert(srcCount >= 0);//srcCount==0 causes return 0, not error
   assert(is_data_region_valid(boundaryRegion));
 
   bool dstTooSmallPlaceholder;
@@ -233,21 +233,21 @@ int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
 
   *dstTooSmall = false;
   int64_t count = 0;
-  for (int64_t i = 0; i < srcCount; i++)
+  for (int64_t i = 0; i < src->count; i++)
   {
     DataRegion toYield;
     bool doYieldCurrent = false;
-    if (does_data_region_contain_other_data_region(boundaryRegion, src[i]))
+    if (does_data_region_contain_other_data_region(boundaryRegion, src->regions[i]))
     {
-      //src[i] is completely contained by 'boundaryRegion'
-      toYield = src[i];
+      //src->regions[i] is completely contained by 'boundaryRegion'
+      toYield = src->regions[i];
       doYieldCurrent = true;
     }
-    else if(do_data_regions_intersect(boundaryRegion, src[i]))
+    else if(do_data_regions_intersect(boundaryRegion, src->regions[i]))
     {
-      //src[i] is partially contained by 'boundaryRegion'
-      int64_t firstIndex = src[i].first_index;
-      int64_t lastIndex = src[i].last_index;
+      //src->regions[i] is partially contained by 'boundaryRegion'
+      int64_t firstIndex = src->regions[i].first_index;
+      int64_t lastIndex = src->regions[i].last_index;
 
       if (firstIndex < boundaryRegion.first_index)
         firstIndex = boundaryRegion.first_index;
@@ -263,13 +263,9 @@ int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
     {
       if (dst != NULL)
       {
-        if (count < dstCapacity)
+        if(!add_data_region(dst, toYield))
         {
-          dst[count++] = toYield;
-        }
-        else
-        {
-          *dstTooSmall = true;
+          *dstTooSmall = true;//TODO: Definitely test this
           break;
         }
       }
@@ -280,28 +276,25 @@ int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
       }
     }
 
-    if (src[i].first_index > boundaryRegion.last_index)
+    if (src->regions[i].first_index > boundaryRegion.last_index)
       break;//Beyond the boundary region, no need to continue iterating
   }
 
   return count;
 }
 
-int64_t count_bounded_data_regions(const DataRegion* src, int64_t srcCount, DataRegion boundaryRegion)
+int64_t count_bounded_data_regions(const DataRegionSet* src, DataRegion boundaryRegion)
 {
   assert(src != NULL);
-  assert(srcCount >= 0);//srcCount==0 returns 0, not an error
   assert(is_data_region_valid(boundaryRegion));
 
-  return get_bounded_data_regions(NULL/*NULL indicates that we only want to count the DataRegions*/, 0, src, srcCount, boundaryRegion, NULL);
+  return get_bounded_data_regions(NULL/*NULL indicates that we only want to count the DataRegions*/, src, boundaryRegion, NULL);
 }
 
-int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const DataRegion* src, int64_t srcCount, DataRegion boundaryRegion, bool* dstTooSmall)
+int64_t get_missing_data_regions(DataRegionSet* dst, const DataRegionSet* src, DataRegion boundaryRegion, bool* dstTooSmall)
 {
-  //dst may be null if caller just wants to count
-  assert(dstCapacity >= 0);//dstCapacity==0 means return 0, not error
+  assert(dst != NULL);
   assert(src != NULL);
-  assert(srcCount >= 0);//srcCount==0 means return 0, not error
   assert(is_data_region_valid(boundaryRegion));
 
   bool dstTooSmallPlaceholder;
@@ -310,23 +303,23 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
 
   *dstTooSmall = false;
   int64_t count = 0;
-  if (add_data_region(dst, boundaryRegion, &count, dstCapacity))
+  if (add_data_region(dst, boundaryRegion))
   {
-    for (int64_t i = 0; i < srcCount; i++)
+    for (int64_t i = 0; i < src->count; i++)
     {
       DataRegion toRemove;
       bool doRemoveCurrent = false;
-      if (does_data_region_contain_other_data_region(boundaryRegion, src[i]))
+      if (does_data_region_contain_other_data_region(boundaryRegion, src->regions[i]))
       {
-        //src[i] is completely contained by 'boundaryRegion'
-        toRemove = src[i];
+        //src->regions[i] is completely contained by 'boundaryRegion'
+        toRemove = src->regions[i];
         doRemoveCurrent = true;
       }
-      else if (do_data_regions_intersect(boundaryRegion, src[i]))
+      else if (do_data_regions_intersect(boundaryRegion, src->regions[i]))
       {
-        //src[i] is partially contained by 'boundaryRegion'
-        int64_t firstIndex = src[i].first_index;
-        int64_t lastIndex = src[i].last_index;
+        //src->regions[i] is partially contained by 'boundaryRegion'
+        int64_t firstIndex = src->regions[i].first_index;
+        int64_t lastIndex = src->regions[i].last_index;
 
         if (firstIndex < boundaryRegion.first_index)
           firstIndex = boundaryRegion.first_index;
@@ -340,7 +333,7 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
 
       if (doRemoveCurrent)
       {
-        if (!remove_data_region(dst, toRemove, &count, dstCapacity))
+        if (!remove_data_region(dst, toRemove))
         {
           *dstTooSmall = true;
           break;
