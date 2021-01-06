@@ -2,72 +2,33 @@
 #include <stdbool.h>
 #include <assert.h>
 
-///<summary>Stores a start and end index of a data region.</summary>
 typedef struct DataRegion
 {
-	///<summary>The index of the first element in the data region.</summary>
 	size_t first_index;
-
-	///<summary>The index of the last element in the data region.</summary>
 	size_t last_index;
 } DataRegion;
 
-///<summary>Checks whether a <see cref="DataRegion"/> completely contains another.</summary>
-///<param name="outer">The 'outer' <see cref="DataRegion"/>.</param>
-///<param name="inner">The 'inner' <see cref="DataRegion"/>.</param>
-///<returns>True if <paramref name="outer"/> contains every index within <paramref name="inner"/>,
-///otherwise false.</returns>
 bool does_data_region_contain_other_data_region(DataRegion outer, DataRegion inner)
 {
 	return inner.first_index >= outer.first_index && inner.last_index <= outer.last_index;
 }
 
-///<summary>Checks whether two <see cref="DataRegion"/>s intersect.</summary>
-///<param name="a">The first <see cref="DataRegion"/>.</param>
-///<param name="b">The second <see cref="DataRegion"/>.</param>
-///<returns>True if at least one index of <paramref name="a"/> is also
-///contained by <paramref name="b"/>, otherwise false.</returns>
 bool do_data_regions_intersect(DataRegion a, DataRegion b)
 {
 	return a.last_index >= b.first_index && b.last_index >= a.first_index;
 }
 
-///<summary>Checks whether two <see cref="DataRegion"/>s are adjacent.</summary>
-///<param name="a">The first <see cref="DataRegion"/>.</param>
-///<param name="b">The second <see cref="DataRegion"/>.</param>
-///<returns>True if <paramref name="a"/> is adjacent to
-///<paramref name="b"/>.</returns>
-///<remarks>Two <see cref="DataRegion"/>s are considered adjacent only if
-///there is no gap between them.</remarks>
 bool are_data_regions_adjacent(DataRegion a, DataRegion b)
 {
 	return b.last_index == a.first_index - 1//'b' is left-adjacent to 'a'
 		|| b.first_index == a.last_index + 1;//'b' is right-adjacent to 'a'
 }
 
-///<summary>Checks whether two <see cref="DataRegion"/>s can be combined.</summary>
-///<param name="a">The first <see cref="DataRegion"/>.</param>
-///<param name="b">The second <see cref="DataRegion"/>.</param>
-///<returns>True if <paramref name="a"/> and <paramref name="b"/> can be 
-///combined, otherwise false.</returns>
-///<remarks>Two <see cref="DataRegion"/>s can only be combined if
-///they are adjacent or intersecting (see <see cref="do_data_regions_intersect(DataRegion,DataRegion)"/>
-///and <see cref="are_data_regions_adjacent(DataRegion,DataRegion)"/>).</remarks>
-///<seealso cref="combine_data_regions"/>
-///<seealso cref="are_data_regions_adjacent(DataRegion,DataRegion)"/>
-///<seealso cref="do_data_regions_intersect(DataRegion,DataRegion)"/>
 bool can_combine_data_regions(DataRegion a, DataRegion b)
 {
 	return are_data_regions_adjacent(a, b) || do_data_regions_intersect(a, b);
 }
 
-///<summary>Combines two <see cref="DataRegion"/>s into one.</summary>
-///<param name="a">The first <see cref="DataRegion"/>.</param>
-///<param name="b">The second <see cref="DataRegion"/>.</param>
-///<returns>A <see cref="DataRegion"/> that combines <paramref name="a"/> and
-///<paramref name="b"/>.</returns>
-///<remarks>The caller is responsible for ensuring that <paramref name="a"/>
-///and <paramref name="b"/> can be combined. See <see cref="can_combine_data_regions(DataRegion,DataRegion)"/>.</remarks>
 DataRegion combine_data_regions(DataRegion a, DataRegion b)
 {
 	assert(can_combine_data_regions(a, b));
@@ -107,22 +68,6 @@ void internal_insert_data_region_at(DataRegion* regions, size_t* regionCount, Da
 	(*regionCount)++;
 }
 
-///<summary>Adds a <see cref="DataRegion"/> to an array of <see cref="DataRegion"/>s.</summary>
-///<param name="regions">Array of <see cref="DataRegion"/>s, sorted in ascending order. Must not
-///contain any overlapping <see cref="DataRegion"/>s.</param>
-///<param name="count">Pointer to a size_t that specifies the number of <see cref="DataRegion"/>s
-///in <paramref name="regions"/>. The value must be assigned before input, and it will be re-assigned
-///for output.</param>
-///<param name="capacity">The maximum number of <see cref="DataRegion"/>s that can fit in the
-///<paramref name="regions"/> argument.</param>
-///<returns>True if <paramref name="toAdd"/> was successfully added to the <paramref name="regions"/>.
-///False indicates insufficient capacity.</returns>
-///<remarks>This function will find the appropriate position at which to insert <paramref name="toAdd"/>
-///into <paramref name="regions"/>. It will also combine any <see cref="DataRegion"/>s that intersect with or
-///are adjacent to <paramref name="toAdd"/> (while keeping them sorted in ascending order). As such, it is 
-///possible for <paramref name="count"/> to be decreased after the insertion. However, this function still
-///requires that the input <paramref name="count"/> value be one less than the <paramref name="capacity"/> (otherwise
-///the <see cref="DataRegion"/> will not be added and false will be returned).</remarks>
 bool add_data_region(DataRegion* regions, DataRegion toAdd, size_t* count, size_t capacity)
 {
 	if (*count < capacity)
@@ -162,23 +107,6 @@ bool add_data_region(DataRegion* regions, DataRegion toAdd, size_t* count, size_
 	}
 }
 
-///<summary>Removes a <see cref="DataRegion"/> from an array of <see cref="DataRegion"/>s.</summary>
-///<param name="regions">Array of <see cref="DataRegion"/>s, sorted in ascending order. Must not
-///contain any overlapping <see cref="DataRegion"/>s.</param>
-///<param name="toRemove">The <see cref="DataRegion"/> to remove.</param>
-///<param name="count">Pointer to a size_t that specifies the number of <see cref="DataRegion"/>s
-///in <paramref name="regions"/>. The value must be assigned before input, and it will be re-assigned
-///for output.</param>
-///<param name="capacity">The maximum number of <see cref="DataRegion"/>s that can fit in the
-///<paramref name="regions"/> argument.</param>
-///<returns>True if <see cref="toRemove"/> was successfully removed from the <paramref name="regions"/>,
-///otherwise false.</returns>
-///<remarks>This function will scan through all <see cref="DataRegion"/>s within the <paramref name="regions"/>
-///argument to find any that intersect <paramref name="toRemove"/>. The intersecting region of each
-///<see cref="DataRegion"/> will be removed. Note that it is possible for this function to result in
-///the <paramref name="count"/> being increased. For example, this may happen when a <see cref="DataRegion"/>
-///is split into two pieces. If there is insufficient capacity, then nothing will be removed and
-///false will be returned.</remarks>
 bool remove_data_region(DataRegion* regions, DataRegion toRemove, size_t* count, size_t capacity)
 {
 	if (*count == capacity)
@@ -210,7 +138,7 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, size_t* count,
 					insertCount++;
 				}
 
-				//See above, it is possible for removeCount to increment by one, 
+				//See above, it is possible for removeCount to increment by one,
 				//but insertCount could theoretically increment by two!
 			}
 			else
@@ -234,7 +162,7 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, size_t* count,
 		if (do_data_regions_intersect(currentRegion, toRemove))
 		{
 			internal_remove_data_region_at(regions, count, i);//Remove 'currentRegion'
-			
+
 			if (currentRegion.first_index < toRemove.first_index)
 			{
 				//The left portion of 'currentRegion' will remain (so we will add it to 'regions')
@@ -261,19 +189,6 @@ bool remove_data_region(DataRegion* regions, DataRegion toRemove, size_t* count,
 	return true;
 }
 
-///<summary>Gets all <see cref="DataRegion"/>s within an array, bounded by a specific <see cref="DataRegion"/>.</summary>
-///<param name="dst">The destination <see cref="DataRegion"/> buffer. May be NULL, in which case this function will only
-///count the number of bounded <see cref="DataRegion"/>s.</param>
-///<param name="dstCapacity">The maximum number of <see cref="DataRegion"/>s that can be stored in <paramref name="dst"/>.</param>
-///<param name="src">The source <see cref="DataRegion"/>s, in ascending order. Must not have overlapping <see cref="DataRegion"/>s.</param>
-///<param name="srcCount">The number of <see cref="DataRegion"/>s in <paramref name="src"/>.</param>
-///<param name="boundaryRegion">The boundary <see cref="DataRegion"/>.</param>
-///<param name="dstTooSmall">Pointer to a boolean that will be assigned to true if <paramref name="dstCapacity"/> was too small, otherwise false.
-///May be NULL, in which case its value will not be assigned.</param>
-///<returns>The number of bounded <see cref="DataRegion"/>s. This number is limited if the <paramref name="dstCapacity"/> was too small.</returns>
-///<remarks>This function will find all <see cref="DataRegion"/>s in <paramref name="src"/> that intersect with <paramref name="boundaryRegion"/>, and
-///assign them (in ascending order) to <paramref name="dst"/> (unless <paramref name="dst"/> is NULL). If <paramref name="dst"/> is NULL, then this function
-///will only count the number of bounded <see cref="DataRegion"/>s in <paramref name="src"/>.</remarks>
 size_t get_bounded_data_regions(DataRegion* dst, size_t dstCapacity, const DataRegion* src, size_t srcCount, DataRegion boundaryRegion, bool* dstTooSmall)
 {
 	if(dstTooSmall != NULL)
@@ -336,28 +251,11 @@ size_t get_bounded_data_regions(DataRegion* dst, size_t dstCapacity, const DataR
 	return count;
 }
 
-///<summary>Gets the number of <see cref="DataRegion"/>s in an array that intersect with a specific boundary <see cref="DataRegion"/>.</summary>
-///<param name="src">The source <see cref="DataRegion"/>s, in ascending order. Must not have overlapping <see cref="DataRegion"/>s.</param>
-///<param name="srcCount">The number of <see cref="DataRegion"/>s in <paramref name="src"/>.</param>
-///<param name="boundaryRegion">The boundary <see cref="DataRegion"/>.</param>
-///<returns>The number of <see cref="DataRegion"/>s in <paramref name="src"/> that intersect with <paramref name="boundaryRegion"/>.</returns>
 size_t count_bounded_data_regions(const DataRegion* src, size_t srcCount, DataRegion boundaryRegion)
 {
 	return get_bounded_data_regions(NULL/*NULL indicates that we only want to count the DataRegions*/, 0, src, srcCount, boundaryRegion, NULL);
 }
 
-///<summary>Gets all 'missing' <see cref="DataRegion"/>s within an array.</summary>
-///<param name="dst">The destination buffer.</param>
-///<param name="dstCapacity">The maximum number of <see cref="DataRegion"/>s that can be stored in <paramref name="dst"/>.</param>
-///<param name="src">The source <see cref="DataRegion"/>s.</param>
-///<param name="srcCount">The number of <see cref="DataRegion"/>s in <paramref name="src"/>.</param>
-///<param name="boundaryRegion">The boundary <see cref="DataRegion"/>.</param>
-///<param name="dstTooSmall">Pointer to a boolean that will be assigned to true if <paramref name="dstCapacity"/> was too small, otherwise false.
-///May be NULL, in which case its value will not be assigned.</param>
-///<returns>The number of <see cref="DataRegion"/>s that were written to <paramref name="dst"/>.</returns>
-///<remarks>This function will scan through all <see cref="DataRegion"/>s in <paramref name="src"/>. Any <see cref="DataRegion"/> within the
-///<paramref name="boundaryRegion"/> that does not exist within <paramref name="src"/> will be assigned to <paramref name="dst"/>, in ascending
-///order.</remarks>
 size_t get_missing_data_regions(DataRegion* dst, size_t dstCapacity, const DataRegion* src, size_t srcCount, DataRegion boundaryRegion, bool* dstTooSmall)
 {
 	if (dstTooSmall != NULL)
