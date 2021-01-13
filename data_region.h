@@ -19,6 +19,32 @@ typedef struct DataRegionSet
   int64_t capacity;
 } DataRegionSet;
 
+DataRegionSet* create_data_region_set_in(void* dst, int64_t dstSize)
+{
+  if(dst == NULL || dstSize < sizeof(DataRegionSet))
+    return NULL;
+
+  int64_t sizeForRegions = dstSize - (int64_t)sizeof(DataRegionSet);
+  int64_t numRegions = sizeForRegions / (int64_t)sizeof(DataRegion);
+  if(numRegions < 0)
+    return NULL;
+
+  DataRegionSet* set = dst;
+  set->regions = (DataRegion*)((uint8_t*)dst + sizeof(DataRegionSet));
+  set->capacity = numRegions;
+  set->count = 0;
+  return set;
+}
+
+DataRegionSet* create_data_region_set(int64_t regionCapacity)
+{
+  if(regionCapacity < 0)
+    return NULL;
+
+  size_t requiredSize = sizeof(DataRegionSet) + (sizeof(DataRegion) * regionCapacity);
+  return create_data_region_set_in(malloc(requiredSize), requiredSize);
+}
+
 bool does_data_region_contain_other_data_region(DataRegion outer, DataRegion inner)
 {
   return inner.first_index >= outer.first_index && inner.last_index <= outer.last_index;
@@ -96,8 +122,10 @@ void internal_insert_data_region_at(DataRegionSet* set, DataRegion toInsert, int
 
 bool add_data_region(DataRegionSet* set, DataRegion toAdd)
 {
-  assert(set != NULL);
-  assert(is_data_region_valid(toAdd));
+  if(set == NULL)
+    return false;
+  if(!is_data_region_valid(toAdd))
+    return false;//TODO: Maybe use enum to define error instead of returning bool
 
   if (set->count < set->capacity)
   {
@@ -138,8 +166,10 @@ bool add_data_region(DataRegionSet* set, DataRegion toAdd)
 
 bool remove_data_region(DataRegionSet* set, DataRegion toRemove)
 {
-  assert(set != NULL);
-  assert(is_data_region_valid(toRemove));
+  if(set == NULL)
+    return false;
+  if(!is_data_region_valid(toRemove))
+    return false;
 
   if (set->count == set->capacity)
   {
@@ -221,15 +251,23 @@ bool remove_data_region(DataRegionSet* set, DataRegion toRemove)
   return true;
 }
 
-int64_t get_bounded_data_regions(DataRegionSet* dst, const DataRegionSet* src, DataRegion boundaryRegion, bool* dstTooSmall)
+int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const DataRegionSet* src, DataRegion boundaryRegion, bool* dstTooSmall)
 {
-  //dst may be NULL if we're just counting the regions
-  assert(src != NULL);
-  assert(is_data_region_valid(boundaryRegion));
+  if(src == NULL)
+    return 0;
+  if(!is_data_region_valid(boundaryRegion))
+    return 0;
 
   bool dstTooSmallPlaceholder;
   if(dstTooSmall == NULL)
     dstTooSmall = &dstTooSmallPlaceholder;
+
+  if(dstCapacity < 0)
+  {
+    //Cannot have a negative destination capacity
+    *dstTooSmall = true;
+    return 0;
+  }
 
   *dstTooSmall = false;
   int64_t count = 0;
@@ -263,7 +301,11 @@ int64_t get_bounded_data_regions(DataRegionSet* dst, const DataRegionSet* src, D
     {
       if (dst != NULL)
       {
-        if(!add_data_region(dst, toYield))
+        if(count < dstCapacity)
+        {
+          dst[count++] = toYield;
+        }
+        else
         {
           *dstTooSmall = true;//TODO: Definitely test this
           break;
@@ -285,25 +327,41 @@ int64_t get_bounded_data_regions(DataRegionSet* dst, const DataRegionSet* src, D
 
 int64_t count_bounded_data_regions(const DataRegionSet* src, DataRegion boundaryRegion)
 {
-  assert(src != NULL);
-  assert(is_data_region_valid(boundaryRegion));
+  if(src == NULL)
+    return 0;
+  if(!is_data_region_valid(boundaryRegion))
+    return 0;
 
-  return get_bounded_data_regions(NULL/*NULL indicates that we only want to count the DataRegions*/, src, boundaryRegion, NULL);
+  return get_bounded_data_regions(NULL/*NULL indicates that we only want to count the DataRegions*/, 0, src, boundaryRegion, NULL);
 }
 
-int64_t get_missing_data_regions(DataRegionSet* dst, const DataRegionSet* src, DataRegion boundaryRegion, bool* dstTooSmall)
+int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const DataRegionSet* src, DataRegion boundaryRegion, bool* dstTooSmall)
 {
-  assert(dst != NULL);
-  assert(src != NULL);
-  assert(is_data_region_valid(boundaryRegion));
+  if(dst == NULL)
+    return 0;
+  if(src == NULL)
+    return 0;
+  if(!is_data_region_valid(boundaryRegion))
+    return 0;
 
   bool dstTooSmallPlaceholder;
   if (dstTooSmall == NULL)
     dstTooSmall = &dstTooSmallPlaceholder;
 
+  if(dstCapacity < 0)
+  {
+    *dstTooSmall = true;
+    return 0;
+  }
+
+  DataRegionSet dstSet;
+  dstSet.regions = dst;
+  dstSet.capacity = dstCapacity;
+  dstSet.count = 0;
+
   *dstTooSmall = false;
   int64_t count = 0;
-  if (add_data_region(dst, boundaryRegion))
+  if (add_data_region(&dstSet, boundaryRegion))
   {
     for (int64_t i = 0; i < src->count; i++)
     {
@@ -333,7 +391,7 @@ int64_t get_missing_data_regions(DataRegionSet* dst, const DataRegionSet* src, D
 
       if (doRemoveCurrent)
       {
-        if (!remove_data_region(dst, toRemove))
+        if (!remove_data_region(&dstSet, toRemove))
         {
           *dstTooSmall = true;
           break;
