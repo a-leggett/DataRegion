@@ -416,7 +416,7 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
   {
     DataRegionSet* set = create_data_region_set(100);
     DataRegion toAdd = (DataRegion){.first_index = 100, .last_index = 199};
-    assert(add_data_region(set, toAdd));
+    assert(add_data_region(set, toAdd) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(100, get_data_region_set_total_length(set));
 
     free_data_region_set(set);
@@ -426,14 +426,14 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
   {
     DataRegionSet* set = create_data_region_set(100);
 
-    assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}));
-    assert(add_data_region(set, (DataRegion){.first_index = 10, .last_index = 19}));
+    assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, (DataRegion){.first_index = 10, .last_index = 19}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(20, get_data_region_set_total_length(set));
 
-    assert(add_data_region(set, (DataRegion){.first_index = 100, .last_index = 100}));
+    assert(add_data_region(set, (DataRegion){.first_index = 100, .last_index = 100}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(21, get_data_region_set_total_length(set));
 
-    assert(add_data_region(set, (DataRegion){.first_index = 1000, .last_index = 1999}));
+    assert(add_data_region(set, (DataRegion){.first_index = 1000, .last_index = 1999}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1021, get_data_region_set_total_length(set));
 
     free_data_region_set(set);
@@ -443,21 +443,21 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
   {
     DataRegionSet* set = create_data_region_set(100);
 
-    assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}));
-    assert(add_data_region(set, (DataRegion){.first_index = 10, .last_index = 19}));
-    assert(add_data_region(set, (DataRegion){.first_index = 100, .last_index = 100}));
-    assert(add_data_region(set, (DataRegion){.first_index = 1000, .last_index = 1999}));
+    assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, (DataRegion){.first_index = 10, .last_index = 19}) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, (DataRegion){.first_index = 100, .last_index = 100}) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, (DataRegion){.first_index = 1000, .last_index = 1999}) == DATA_REGION_SET_SUCCESS);
 
-    assert(remove_data_region(set, (DataRegion){.first_index = 1, .last_index = 1}));
+    assert(remove_data_region(set, (DataRegion){.first_index = 1, .last_index = 1}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1020, get_data_region_set_total_length(set));
 
-    assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 4}));
+    assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 4}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1016, get_data_region_set_total_length(set));
 
-    assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 4}));
+    assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 4}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1016, get_data_region_set_total_length(set));
 
-    assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 1099}));
+    assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 1099}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(900, get_data_region_set_total_length(set));
 
     free_data_region_set(set);
@@ -467,7 +467,7 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
   {
     const int capacity = 100;
     DataRegionSet* set = create_data_region_set(capacity);
-    assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}));
+    assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1, set->count);
     internal_remove_data_region_at(set, 0);
     assert_int_eq(0, set->count);
@@ -487,9 +487,9 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     DataRegion c = (DataRegion){.first_index = 100, .last_index = 199};
 
     //Add three regions
-    assert(add_data_region(set, a));
-    assert(add_data_region(set, b));
-    assert(add_data_region(set, c));
+    assert(add_data_region(set, a) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, b) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, c) == DATA_REGION_SET_SUCCESS);
 
     //Remove the first one
     internal_remove_data_region_at(set, 0);
@@ -514,11 +514,11 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     DataRegion e = (DataRegion){.first_index = 1000, .last_index = 1999};
 
     //Add 5 regions
-    assert(add_data_region(set, a));
-    assert(add_data_region(set, b));
-    assert(add_data_region(set, c));
-    assert(add_data_region(set, d));
-    assert(add_data_region(set, e));
+    assert(add_data_region(set, a) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, b) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, c) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, d) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, e) == DATA_REGION_SET_SUCCESS);
 
     //Remove the middle one (c)
     internal_remove_data_region_at(set, 2);
@@ -545,11 +545,11 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     DataRegion e = (DataRegion){.first_index = 1000, .last_index = 1999};
 
     //Add 5 regions
-    assert(add_data_region(set, a));
-    assert(add_data_region(set, b));
-    assert(add_data_region(set, c));
-    assert(add_data_region(set, d));
-    assert(add_data_region(set, e));
+    assert(add_data_region(set, a) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, b) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, c) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, d) == DATA_REGION_SET_SUCCESS);
+    assert(add_data_region(set, e) == DATA_REGION_SET_SUCCESS);
 
     //Remove the last one (e)
     internal_remove_data_region_at(set, 4);
