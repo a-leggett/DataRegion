@@ -1,7 +1,7 @@
 #ifndef DATA_REGION_H
 #define DATA_REGION_H
 #include <stdbool.h>
-#include <assert.h>
+#include <assert.h>//TODO: I'm REALLY on the fence about including asserts. It would be nice to catch assert failures in debug (particularly helpful is app code sends wrong args... Maybe have return codes for such cases? But what about things that already have return codes, like combine_data_regions?)
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -43,6 +43,16 @@ DataRegionSet* create_data_region_set(int64_t regionCapacity)
 
   size_t requiredSize = sizeof(DataRegionSet) + (sizeof(DataRegion) * regionCapacity);
   return create_data_region_set_in(malloc(requiredSize), requiredSize);
+}
+
+void free_data_region_set(DataRegionSet* set)
+{
+  free(set);
+}
+
+int64_t get_data_region_length(DataRegion region)
+{
+  return (region.last_index - region.first_index) + 1;
 }
 
 bool does_data_region_contain_other_data_region(DataRegion outer, DataRegion inner)
@@ -88,6 +98,18 @@ DataRegion combine_data_regions(DataRegion a, DataRegion b)
     ret.last_index = b.last_index;
 
   return ret;
+}
+
+int64_t get_data_region_set_total_length(const DataRegionSet* set)
+{
+  //TODO: Optimize this to be a field of 'DataRegionSet', updated O(1) upon add/remove.
+  if(set == NULL)
+    return 0;
+
+  int64_t total = 0;
+  for(int64_t i = 0; i < set->count; i++)
+    total += get_data_region_length(set->regions[i]);
+  return total;
 }
 
 void internal_remove_data_region_at(DataRegionSet* set, int64_t index)
