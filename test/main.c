@@ -1,6 +1,29 @@
 #include "../data_region.h"
 #include "gidunit.h"
 
+DataRegionSet* init_test_data_region_set(DataRegionSet* set, int randCount)
+{
+  for(int i = 0; i < randCount; i++)
+  {
+    if(add_data_region(set, (DataRegion){.first_index = i*20, .last_index=(i*20)+9}) != DATA_REGION_SET_SUCCESS)
+      return NULL;
+  }
+  return set;
+}
+
+#define create_test_data_region_set(capacity, randCount)                   \
+  init_test_data_region_set(                                               \
+    create_data_region_set_in(                                             \
+      gid_malloc(sizeof(DataRegionSet) + (sizeof(DataRegion) * capacity)), \
+      sizeof(DataRegionSet) + (sizeof(DataRegion) * capacity)              \
+    ),                                                                     \
+    randCount                                                              \
+  )
+
+#define free_test_data_region_set(set) gid_free(set)
+
+
+
 BEGIN_TEST_SUITE(DataRegionSetInitialization)
 
   Test(create_data_region_set_in_when_dst_is_null,
@@ -407,24 +430,28 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
 
   Test(get_data_region_set_total_length_zero_after_initialization)
   {
-    DataRegionSet* set = create_data_region_set(100);
+    const int capacity = 100;
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
     assert_int_eq(0, set->count);
-    free_data_region_set(set);
+    assert_int_eq(capacity, set->capacity);
+    free_test_data_region_set(set);
   }
 
   Test(get_data_region_set_total_length_after_one_add)
   {
-    DataRegionSet* set = create_data_region_set(100);
+    const int capacity = 100;
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
     DataRegion toAdd = (DataRegion){.first_index = 100, .last_index = 199};
     assert(add_data_region(set, toAdd) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(100, get_data_region_set_total_length(set));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(get_data_region_set_total_length_after_multi_add)
   {
-    DataRegionSet* set = create_data_region_set(100);
+    const int capacity = 100;
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}) == DATA_REGION_SET_SUCCESS);
     assert(add_data_region(set, (DataRegion){.first_index = 10, .last_index = 19}) == DATA_REGION_SET_SUCCESS);
@@ -436,12 +463,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert(add_data_region(set, (DataRegion){.first_index = 1000, .last_index = 1999}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1021, get_data_region_set_total_length(set));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(get_data_region_set_total_length_after_add_and_remove)
   {
-    DataRegionSet* set = create_data_region_set(100);
+    const int capacity = 100;
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}) == DATA_REGION_SET_SUCCESS);
     assert(add_data_region(set, (DataRegion){.first_index = 10, .last_index = 19}) == DATA_REGION_SET_SUCCESS);
@@ -460,13 +488,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert(remove_data_region(set, (DataRegion){.first_index = 0, .last_index = 1099}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(900, get_data_region_set_total_length(set));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(internal_remove_data_region_at_single_region)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
     assert(add_data_region(set, (DataRegion){.first_index = 0, .last_index = 9}) == DATA_REGION_SET_SUCCESS);
     assert_int_eq(1, set->count);
     internal_remove_data_region_at(set, 0);
@@ -474,13 +502,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_int_eq(capacity, set->capacity);
     assert_int_eq(0, get_data_region_set_total_length(set));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(internal_remove_data_region_at_first_region_of_many)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion a = (DataRegion){.first_index = 0, .last_index = 1};
     DataRegion b = (DataRegion){.first_index = 10, .last_index = 19};
@@ -499,13 +527,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&b, &set->regions[0], sizeof(DataRegion));
     assert_memory_eq(&c, &set->regions[1], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(internal_remove_data_region_at_middle_of_many)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion a = (DataRegion){.first_index = 0, .last_index = 1};
     DataRegion b = (DataRegion){.first_index = 10, .last_index = 19};
@@ -530,13 +558,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&d, &set->regions[2], sizeof(DataRegion));
     assert_memory_eq(&e, &set->regions[3], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(internal_remove_data_region_at_end_of_many)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion a = (DataRegion){.first_index = 0, .last_index = 1};
     DataRegion b = (DataRegion){.first_index = 10, .last_index = 19};
@@ -561,13 +589,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&c, &set->regions[2], sizeof(DataRegion));
     assert_memory_eq(&d, &set->regions[3], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(insert_data_region_at_empty)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion toInsert = (DataRegion){.first_index = 1, .last_index = 5};
     internal_insert_data_region_at(set, toInsert, 0);
@@ -576,13 +604,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&toInsert, &set->regions[0], sizeof(DataRegion));
     assert_int_eq(5, get_data_region_set_total_length(set));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(insert_data_region_at_before_single_region)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion existing = (DataRegion){.first_index = 10, .last_index = 19};
     internal_insert_data_region_at(set, existing, 0);
@@ -594,13 +622,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&toInsert, &set->regions[0], sizeof(DataRegion));
     assert_memory_eq(&existing, &set->regions[1], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(insert_data_region_at_after_single_region)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion existing = (DataRegion){.first_index = 10, .last_index = 19};
     internal_insert_data_region_at(set, existing, 0);
@@ -612,13 +640,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&existing, &set->regions[0], sizeof(DataRegion));
     assert_memory_eq(&toInsert, &set->regions[1], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(insert_data_region_at_before_many_regions)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion a = (DataRegion){.first_index = 0, .last_index = 9};
     DataRegion b = (DataRegion){.first_index = 20, .last_index = 29};
@@ -641,13 +669,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&b, &set->regions[3], sizeof(DataRegion));
     assert_memory_eq(&a, &set->regions[4], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(insert_data_region_at_between_many_regions)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion a = (DataRegion){.first_index = 0, .last_index = 9};
     DataRegion b = (DataRegion){.first_index = 20, .last_index = 29};
@@ -671,13 +699,13 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&b, &set->regions[3], sizeof(DataRegion));
     assert_memory_eq(&a, &set->regions[4], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
   Test(insert_data_region_at_after_many_regions)
   {
     const int capacity = 100;
-    DataRegionSet* set = create_data_region_set(capacity);
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
 
     DataRegion a = (DataRegion){.first_index = 0, .last_index = 9};
     DataRegion b = (DataRegion){.first_index = 20, .last_index = 29};
@@ -700,7 +728,7 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
     assert_memory_eq(&d, &set->regions[3], sizeof(DataRegion));
     assert_memory_eq(&e, &set->regions[4], sizeof(DataRegion));
 
-    free_data_region_set(set);
+    free_test_data_region_set(set);
   }
 
 END_TEST_SUITE()
