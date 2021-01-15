@@ -892,6 +892,7 @@ BEGIN_TEST_SUITE(DataRegionSetAddTests)
     assert_int_eq(capacity, set->capacity);
     assert_int_eq(1, set->count);//1 because 'toAdd' was combined with 'existing'
     assert_int_eq(100, get_data_region_set_total_length(set));
+    assert_memory_eq(&existing, &set->regions[0], sizeof(DataRegion));
 
     free_test_data_region_set(set);
   }
@@ -909,6 +910,7 @@ BEGIN_TEST_SUITE(DataRegionSetAddTests)
     assert_int_eq(capacity, set->capacity);
     assert_int_eq(1, set->count);//1 because 'toAdd' was combined with 'existing'
     assert_int_eq(2000, get_data_region_set_total_length(set));
+    assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
 
     free_test_data_region_set(set);
   }
@@ -926,6 +928,7 @@ BEGIN_TEST_SUITE(DataRegionSetAddTests)
     assert_int_eq(capacity, set->capacity);
     assert_int_eq(1, set->count);//Because 'toAdd' was combined with 'existing'
     assert_int_eq(100, get_data_region_set_total_length(set));
+    assert_memory_eq(&existing, &set->regions[0], sizeof(DataRegion));
 
     free_test_data_region_set(set);
   }
@@ -982,39 +985,209 @@ BEGIN_TEST_SUITE(DataRegionSetAddTests)
     free_test_data_region_set(set);
   }
 
-  Test(add_data_region_adjacent_to_one_of_two_existing)
+  Test(add_data_region_adjacent_to_one_of_two_existing,
+    EnumParam(capacity, 2, 3, 4, 5, 1000)
+    EnumParam(relativeIndex, 0, 1)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");//TODO: Implement
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion relative = relativeIndex == 0 ? existingA : existingB;
+    DataRegion toAdd =
+      toLeft ? (DataRegion){.first_index = relative.first_index - 100, .last_index = relative.first_index - 1}
+             : (DataRegion){.first_index = relative.last_index + 1, .last_index = relative.last_index + 100};
+
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100+100, get_data_region_set_total_length(set));
+
+    if(relativeIndex == 0)
+    {
+      if(toLeft)
+      {
+        DataRegion combo = (DataRegion){.first_index = toAdd.first_index, .last_index = existingA.last_index};
+        assert_memory_eq(&combo, &set->regions[0], sizeof(DataRegion));
+        assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+      }
+      else
+      {
+        DataRegion combo = (DataRegion){.first_index = existingA.first_index, .last_index = toAdd.last_index};
+        assert_memory_eq(&combo, &set->regions[0], sizeof(DataRegion));
+        assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+      }
+    }
+    else
+    {
+      if(toLeft)
+      {
+        DataRegion combo = (DataRegion){.first_index = toAdd.first_index, .last_index = existingB.last_index};
+        assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+        assert_memory_eq(&combo, &set->regions[1], sizeof(DataRegion));
+      }
+      else
+      {
+        DataRegion combo = (DataRegion){.first_index = existingB.first_index, .last_index = toAdd.last_index};
+        assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+        assert_memory_eq(&combo, &set->regions[1], sizeof(DataRegion));
+      }
+    }
+
+    free_test_data_region_set(set);
   }
 
-  Test(add_data_region_between_two_existing_non_adjacent)
+  Test(add_data_region_between_two_existing_non_adjacent,
+    EnumParam(capacity, 3, 4, 5, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion toAdd = (DataRegion){.first_index = 300, .last_index = 399};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(3, set->count);
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&toAdd, &set->regions[1], sizeof(DataRegion));
+    assert_memory_eq(&existingB, &set->regions[2], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(add_data_region_adjacent_between_two_existing)
+  Test(add_data_region_adjacent_between_two_existing,
+    EnumParam(capacity, 2, 3, 4, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion toAdd = (DataRegion){.first_index = existingA.last_index + 1, .last_index = existingB.first_index - 1};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//Because all regions will be combined
+    DataRegion combined = (DataRegion){.first_index = existingA.first_index, .last_index = existingB.last_index};
+    assert_memory_eq(&combined, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(add_data_region_partially_overlapping_one_of_two_existing)
+Test(add_data_region_partially_overlapping_one_of_two_existing,
+    EnumParam(capacity, 2, 3, 4, 1000)
+    EnumParam(relativeIndex, 0, 1)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion relative = relativeIndex == 0 ? existingA : existingB;
+
+    DataRegion toAdd =
+      toLeft ? (DataRegion){.first_index = relative.first_index - 10, .last_index = relative.first_index + 10}
+             : (DataRegion){.first_index = relative.last_index - 10, .last_index = relative.last_index + 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100+10, get_data_region_set_total_length(set));
+
+    DataRegion combined =
+      toLeft ? (DataRegion){.first_index = toAdd.first_index, .last_index = relative.last_index}
+             : (DataRegion){.first_index = relative.first_index, .last_index = toAdd.last_index};
+    if(relativeIndex == 0)
+    {
+      assert_memory_eq(&combined, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+    }
+    else
+    {
+      assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&combined, &set->regions[1], sizeof(DataRegion));
+    }
+
+    free_test_data_region_set(set);
   }
 
-  Test(add_data_region_partially_overlapping_both_of_two_existing)
+  Test(add_data_region_partially_overlapping_both_of_two_existing,
+    EnumParam(capacity, 2, 3, 4, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion toAdd = (DataRegion){.first_index = existingA.first_index + 10, .last_index = existingB.last_index - 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//1 because all regions were combined
+    assert_int_eq(700, get_data_region_set_total_length(set));
+
+    DataRegion combined = (DataRegion){.first_index = existingA.first_index, .last_index = existingB.last_index};
+    assert_memory_eq(&combined, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(add_data_region_totally_overlapped_by_one_of_two_existing)
+  Test(add_data_region_equal_to_one_of_several,
+    EnumParam(capacity, 2, 3, 4, 1000)
+    EnumParam(existingIndex, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion toAdd = existingIndex == 0 ? existingA : existingB;
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100, get_data_region_set_total_length(set));
+
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(add_data_region_partially_overlapping_one_of_two_existing)
+  Test(add_data_region_totally_overlapped_by_one_of_two_existing,
+    EnumParam(capacity, 2, 3, 4, 1000)
+    EnumParam(existingIndex, 0 ,1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion overlappedBy = existingIndex == 0 ? existingA : existingB;
+    DataRegion toAdd = (DataRegion){.first_index = overlappedBy.first_index + 10, .last_index = overlappedBy.last_index - 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100, get_data_region_set_total_length(set));
+
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
   Test(add_data_region_totally_overlapping_one_of_two_existing)
@@ -1050,6 +1223,11 @@ BEGIN_TEST_SUITE(DataRegionSetAddTests)
   }
 
   Test(add_data_region_fails_when_capacity_is_zero)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_regions_several_scenarios)
   {
     assert_fail("Not Implemented");
   }
@@ -1339,5 +1517,6 @@ int main()
   ADD_TEST_SUITE(DataRegionSetRemoveTests);
   ADD_TEST_SUITE(DataRegionSetGetBoundedDataRegionsTests);
   ADD_TEST_SUITE(DataRegionSetGetMissingDataRegionsTests);
+
   return gidunit();
 }
