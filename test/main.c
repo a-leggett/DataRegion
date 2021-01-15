@@ -930,7 +930,404 @@ BEGIN_TEST_SUITE(DataRegionSetAddTests)
     free_test_data_region_set(set);
   }
 
+  Test(add_data_region_when_full_works_if_combined)
+  {
+    DataRegionSet* set = create_test_data_region_set(1, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd = (DataRegion){.first_index = 90, .last_index = 209};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(1, set->capacity);
+    assert_int_eq(1, set->count);
+    assert_int_eq(120, get_data_region_set_total_length(set));
+    assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_far_from_two_existing,
+    EnumParam(capacity, 3, 4, 5, 1000)
+    EnumParam(toLeft, 0, 1))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion toAdd =
+      toLeft ? (DataRegion){.first_index = -10999, .last_index = -10000}
+             : (DataRegion){.first_index = 10000, .last_index = 10999 };
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(3, set->count);
+    assert_int_eq(100+100+1000, get_data_region_set_total_length(set));
+
+    if(toLeft)
+    {
+      assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existingA, &set->regions[1], sizeof(DataRegion));
+      assert_memory_eq(&existingB, &set->regions[2], sizeof(DataRegion));
+    }
+    else
+    {
+      assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+      assert_memory_eq(&toAdd, &set->regions[2], sizeof(DataRegion));
+    }
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_adjacent_to_one_of_two_existing)
+  {
+    assert_fail("Not Implemented");//TODO: Implement
+  }
+
+  Test(add_data_region_between_two_existing_non_adjacent)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_adjacent_between_two_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_partially_overlapping_one_of_two_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_partially_overlapping_both_of_two_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_totally_overlapped_by_one_of_two_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_partially_overlapping_one_of_two_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_totally_overlapping_one_of_two_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_totally_overlapping_both_of_two_existing,
+    EnumParam(padding, 0, 1, 2, 3, 1000))
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_far_from_three_existing,
+    EnumParam(capacity, 4, 5, 6, 1000))
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_various_overlaps_with_three_existing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_many_scenarios)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_fails_when_full_capacity_and_no_overlap)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(add_data_region_fails_when_capacity_is_zero)
+  {
+    assert_fail("Not Implemented");
+  }
+
 END_TEST_SUITE()
+
+
+BEGIN_TEST_SUITE(DataRegionSetRemoveTests)
+
+  Test(remove_data_region_when_src_NULL)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_when_region_is_invalid)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_no_effect_when_empty)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_no_effect_when_region_far_from_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_no_effect_when_adjacent_to_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_all_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_middle_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_middle_of_single_fails_when_capacity_exceeded)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_no_effect_when_region_far_from_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_of_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_two_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_middle_of_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlap_middle_of_one_of_several_fails_when_capacity_exceeded)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_no_effect_when_adjacent_to_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_no_effect_when_adjacent_to_two_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_overlaps_all_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(remove_data_region_several_scenarios)
+  {
+    assert_fail("Not Implemented");
+  }
+
+END_TEST_SUITE()
+
+BEGIN_TEST_SUITE(DataRegionSetGetBoundedDataRegionsTests)
+
+  //TODO: All of these tests need to run case where 'dstTooSmall' is NULL or non-NULL
+  //TODO: Also, all of these tests need to call count_bounded_data_regions to verify
+
+  Test(get_bounded_data_regions_when_src_NULL)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_is_invalid)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_contains_nothing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_adjacent_to_single)
+  {
+      assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_adjacent_to_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_partially_overlaps_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_partially_overlaps_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_totally_overlaps_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_totally_overlaps_one_and_partially_overlaps_other_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_totally_overlaps_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_is_subset_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_when_boundary_is_subset_of_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_superset_boundary_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_superset_boundary_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_overlap_boundary_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_overlap_boundary_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_bounded_data_regions_several_scenarios)
+  {
+    assert_fail("Not Implemented");
+  }
+
+END_TEST_SUITE()
+
+
+BEGIN_TEST_SUITE(DataRegionSetGetMissingDataRegionsTests)
+
+  Test(get_missing_data_regions_when_dst_NULL)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_src_NULL)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_invalid)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_src_empty)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_dst_capacity_zero)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_contains_nothing)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_partially_contains_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_partially_contains_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_partially_contains_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_is_proper_subset_of_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_is_proper_subset_of_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_totally_contains_single)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_totally_contains_one_of_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_when_boundary_totally_contains_several)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_stops_when_capacity_exceeded)
+  {
+    assert_fail("Not Implemented");
+  }
+
+  Test(get_missing_data_regions_several_scenarios)
+  {
+    assert_fail("Not Implemented");
+  }
+
+END_TEST_SUITE()
+
 
 
 int main()
@@ -939,5 +1336,8 @@ int main()
   ADD_TEST_SUITE(DataRegionFunctionTests);
   ADD_TEST_SUITE(DataRegionSetFunctionTests);
   ADD_TEST_SUITE(DataRegionSetAddTests);
+  ADD_TEST_SUITE(DataRegionSetRemoveTests);
+  ADD_TEST_SUITE(DataRegionSetGetBoundedDataRegionsTests);
+  ADD_TEST_SUITE(DataRegionSetGetMissingDataRegionsTests);
   return gidunit();
 }
