@@ -22,7 +22,28 @@ DataRegionSet* init_test_data_region_set(DataRegionSet* set, int randCount)
 
 #define free_test_data_region_set(set) gid_free(set)
 
+DataRegionSet* clone_data_region_set(const DataRegionSet* set)
+{
+  DataRegionSet* ret = create_data_region_set(set->capacity);
+  ret->count = set->count;
+  for(int64_t i = 0; i < set->count; i++)
+    ret->regions[i] = set->regions[i];
+  return ret;
+}
 
+#define assert_data_region_set_eq(expected, actual)                           \
+{                                                                             \
+  const DataRegionSet* _local_exp = (expected);                               \
+  const DataRegionSet* _local_act = (actual);                                 \
+  assert_not_null(_local_exp);                                                \
+  assert_not_null(_local_act);                                                \
+                                                                              \
+  assert_int_eq(_local_exp->capacity, _local_act->capacity);                  \
+  assert_int_eq(_local_exp->count, _local_act->count);                        \
+  assert_memory_eq(_local_exp->regions, _local_act->regions, (sizeof(DataRegion)*_local_exp->count));\
+}
+
+#define free_clone_data_region_set(set) free_data_region_set(set)
 
 BEGIN_TEST_SUITE(DataRegionSetInitialization)
 
@@ -733,10 +754,190 @@ BEGIN_TEST_SUITE(DataRegionSetFunctionTests)
 
 END_TEST_SUITE()
 
+BEGIN_TEST_SUITE(DataRegionSetAddTests)
+
+  Test(add_data_region_when_dst_is_NULL)
+  {
+    DataRegion toAdd = (DataRegion){.first_index = 1, .last_index = 7};
+    assert_int_eq(DATA_REGION_SET_NULL_ARG, add_data_region(NULL, toAdd));
+  }
+
+  Test(add_data_region_when_region_is_invalid,
+    EnumParam(initCount, 0, 1, 2, 3, 100))
+  {
+    const int capacity = 100;
+    DataRegionSet* set = create_test_data_region_set(capacity, initCount);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    //Try to add an invalid DataRegion
+    DataRegion invalid = (DataRegion){.first_index = 7, .last_index = 1};
+    assert_int_eq(DATA_REGION_SET_INVALID_REGION, add_data_region(set, invalid));
+
+    //Check that the set wasn't affected by the failed add
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
+
+  Test(add_data_region_when_dst_is_empty,
+    EnumParam(capacity, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+
+    DataRegion toAdd = (DataRegion){.first_index = 1, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);
+    assert_int_eq(199, get_data_region_set_total_length(set));
+    assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_far_from_single_existing,
+    EnumParam(capacity, 2, 3, 1000)
+    EnumParam(distance, -10000, -500, 500, 10000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd = (DataRegion){.first_index = distance, .last_index = distance+74};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+75, get_data_region_set_total_length(set));
+
+    //Check that regions are added in ascending order
+    if(toAdd.last_index < existing.last_index)
+    {
+      assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existing, &set->regions[1], sizeof(DataRegion));
+    }
+    else
+    {
+      assert_memory_eq(&existing, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&toAdd, &set->regions[1], sizeof(DataRegion));
+    }
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_adjacent_to_single_existing,
+    EnumParam(capacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1)
+    EnumParam(size, 1, 2, 3, 100))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd =
+      toLeft ? (DataRegion){.first_index = existing.first_index - size, .last_index = existing.first_index - 1}
+             : (DataRegion){.first_index = existing.last_index + 1, .last_index = existing.last_index + size};
+
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//1 because 'toAdd' was combined with 'existing'
+    assert_int_eq(100+size, get_data_region_set_total_length(set));
+
+    DataRegion expect =
+      toLeft ? (DataRegion){.first_index = toAdd.first_index, .last_index = existing.last_index}
+             : (DataRegion){.first_index = existing.first_index, .last_index = toAdd.last_index};
+    assert_memory_eq(&expect, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_partially_overlapping_single_existing,
+    EnumParam(capacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd =
+      toLeft ? (DataRegion){.first_index = existing.first_index - 10, .last_index = existing.first_index + 10}
+             : (DataRegion){.first_index = existing.last_index - 10, .last_index = existing.last_index + 10};
+
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//1 because 'toAdd' was combined with 'existing'
+    assert_int_eq(100+10, get_data_region_set_total_length(set));
+
+    DataRegion expect =
+      toLeft ? (DataRegion){.first_index = toAdd.first_index, .last_index = existing.last_index}
+             : (DataRegion){.first_index = existing.first_index, .last_index = toAdd.last_index};
+    assert_memory_eq(&expect, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_totally_overlapped_by_single_existing,
+    EnumParam(capacity, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd = (DataRegion){.first_index = 150, .last_index = 159};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//1 because 'toAdd' was combined with 'existing'
+    assert_int_eq(100, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_totally_overlapping_single_existing,
+    EnumParam(capacity, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd = (DataRegion){.first_index = -1000, .last_index = 999};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//1 because 'toAdd' was combined with 'existing'
+    assert_int_eq(2000, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(add_data_region_equal_to_single_existing,
+    EnumParam(capacity, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toAdd = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);//Because 'toAdd' was combined with 'existing'
+    assert_int_eq(100, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
+  }
+
+END_TEST_SUITE()
+
+
 int main()
 {
   ADD_TEST_SUITE(DataRegionSetInitialization);
   ADD_TEST_SUITE(DataRegionFunctionTests);
   ADD_TEST_SUITE(DataRegionSetFunctionTests);
+  ADD_TEST_SUITE(DataRegionSetAddTests);
   return gidunit();
 }
