@@ -156,32 +156,32 @@ DataRegionSetResult add_data_region(DataRegionSet* set, DataRegion toAdd)
   if(!is_data_region_valid(toAdd))
     return DATA_REGION_SET_INVALID_REGION;
 
-  if (set->count < set->capacity)
+  int64_t insertPos = 0;
+
+  //Find where to insert 'toAdd', and also remove any 'combinable' DataRegions
+  for (int64_t i = 0; i < set->count; i++)
   {
-    int64_t insertPos = 0;
+    DataRegion current = set->regions[i];
 
-    //Find where to insert 'toAdd', and also remove any 'combinable' DataRegions
-    for (int64_t i = 0; i < set->count; i++)
+    if (can_combine_data_regions(current, toAdd))
     {
-      DataRegion current = set->regions[i];
-
-      if (can_combine_data_regions(current, toAdd))
-      {
-        //Remove this DataRegion since it will be combined with 'toAdd'
-        internal_remove_data_region_at(set, i);
-        toAdd = combine_data_regions(current, toAdd);
-        i--;//Since we removed a DataRegion
-      }
-      else
-      {
-        if (current.last_index < toAdd.first_index)
-          insertPos = i + 1;
-
-        if (current.first_index > toAdd.last_index)
-          break;//Done finding the insert position and removing combinable DataRegions
-      }
+      //Remove this DataRegion since it will be combined with 'toAdd'
+      internal_remove_data_region_at(set, i);
+      toAdd = combine_data_regions(current, toAdd);
+      i--;//Since we removed a DataRegion
     }
+    else
+    {
+      if (current.last_index < toAdd.first_index)
+        insertPos = i + 1;
 
+      if (current.first_index > toAdd.last_index)
+        break;//Done finding the insert position and removing combinable DataRegions
+    }
+  }
+
+  if(set->count < set->capacity)
+  {
     //Insert 'toAdd'
     internal_insert_data_region_at(set, toAdd, insertPos);
     return DATA_REGION_SET_SUCCESS;
