@@ -40,6 +40,9 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
                                                                               \
   assert_int_eq(_local_exp->capacity, _local_act->capacity);                  \
   assert_int_eq(_local_exp->count, _local_act->count);                        \
+  assert_int_eq(                                                              \
+    get_data_region_set_total_length(_local_exp),                             \
+    get_data_region_set_total_length(_local_act));                            \
   assert_memory_eq(_local_exp->regions, _local_act->regions, (sizeof(DataRegion)*_local_exp->count));\
 }
 
@@ -1168,7 +1171,7 @@ Test(add_data_region_partially_overlapping_one_of_two_existing,
 
   Test(add_data_region_totally_overlapped_by_one_of_two_existing,
     EnumParam(capacity, 2, 3, 4, 1000)
-    EnumParam(existingIndex, 0 ,1))
+    EnumParam(existingIndex, 0, 1))
   {
     DataRegionSet* set = create_test_data_region_set(capacity, 0);
     DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
@@ -1190,26 +1193,94 @@ Test(add_data_region_partially_overlapping_one_of_two_existing,
     free_test_data_region_set(set);
   }
 
-  Test(add_data_region_totally_overlapping_one_of_two_existing)
+  Test(add_data_region_totally_overlapping_one_of_two_existing,
+    EnumParam(capacity, 2, 3, 4, 1000)
+    EnumParam(existingIndex, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion overlappedBy = existingIndex == 0 ? existingA : existingB;
+    DataRegion toAdd = (DataRegion){.first_index = overlappedBy.first_index - 10, .last_index = overlappedBy.last_index + 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+120, get_data_region_set_total_length(set));
+
+    if(existingIndex == 0)
+    {
+      assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+    }
+    else
+    {
+      assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&toAdd, &set->regions[1], sizeof(DataRegion));
+    }
+
+    free_test_data_region_set(set);
   }
 
   Test(add_data_region_totally_overlapping_both_of_two_existing,
+    EnumParam(capacity, 2, 3, 1000)
     EnumParam(padding, 0, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+
+    DataRegion toAdd = (DataRegion){.first_index = existingA.first_index - padding, .last_index = existingB.last_index + padding};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);
+    assert_int_eq(700+(2*padding), get_data_region_set_total_length(set));
+    assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
   Test(add_data_region_far_from_three_existing,
-    EnumParam(capacity, 4, 5, 6, 1000))
+    EnumParam(capacity, 4, 5, 6, 1000)
+    EnumParam(offset, -10000, 10000))
   {
-    assert_fail("Not Implemented");
-  }
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
 
-  Test(add_data_region_various_overlaps_with_three_existing)
-  {
-    assert_fail("Not Implemented");
+    DataRegion toAdd = (DataRegion){.first_index = offset, .last_index = offset + 49};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, toAdd));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(4, set->count);
+    assert_int_eq(100+100+100+50, get_data_region_set_total_length(set));
+
+    if(offset < existingA.first_index)
+    {
+      assert_memory_eq(&toAdd, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existingA, &set->regions[1], sizeof(DataRegion));
+      assert_memory_eq(&existingB, &set->regions[2], sizeof(DataRegion));
+      assert_memory_eq(&existingC, &set->regions[3], sizeof(DataRegion));
+    }
+    else
+    {
+      assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+      assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+      assert_memory_eq(&existingC, &set->regions[2], sizeof(DataRegion));
+      assert_memory_eq(&toAdd, &set->regions[3], sizeof(DataRegion));
+    }
+
+    free_test_data_region_set(set);
   }
 
   Test(add_data_region_many_scenarios)
@@ -1217,19 +1288,34 @@ Test(add_data_region_partially_overlapping_one_of_two_existing,
     assert_fail("Not Implemented");
   }
 
-  Test(add_data_region_fails_when_full_capacity_and_no_overlap)
+  Test(add_data_region_fails_when_full_capacity_and_no_overlap,
+    EnumParam(capacity, 0, 1, 2, 3, 4, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, capacity);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion toAdd = (DataRegion){.first_index = -100000, .last_index = -90000};
+    assert_int_eq(DATA_REGION_SET_OUT_OF_SPACE, add_data_region(set, toAdd));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
   Test(add_data_region_fails_when_capacity_is_zero)
   {
-    assert_fail("Not Implemented");
-  }
+    DataRegionSet* set = create_test_data_region_set(0, 0);
 
-  Test(add_data_regions_several_scenarios)
-  {
-    assert_fail("Not Implemented");
+    DataRegion toAdd = (DataRegion){.first_index = 100, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_OUT_OF_SPACE, add_data_region(set, toAdd));
+
+    assert_int_eq(0, set->capacity);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
   }
 
 END_TEST_SUITE()
@@ -1239,87 +1325,484 @@ BEGIN_TEST_SUITE(DataRegionSetRemoveTests)
 
   Test(remove_data_region_when_src_NULL)
   {
-    assert_fail("Not Implemented");
+    DataRegion toRemove = (DataRegion){.first_index = 0, .last_index = 9};
+    assert_int_eq(DATA_REGION_SET_NULL_ARG, remove_data_region(NULL, toRemove));
   }
 
-  Test(remove_data_region_when_region_is_invalid)
+  Test(remove_data_region_when_region_is_invalid,
+    EnumParam(count, 0, 1, 2, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(count + 1, count);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion invalid = (DataRegion){.first_index = 7, .last_index = 1};
+    assert_int_eq(DATA_REGION_SET_INVALID_REGION, remove_data_region(set, invalid));
+
+    //Check that the set wasn't affected
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(remove_data_region_no_effect_when_empty)
+  Test(remove_data_region_no_effect_when_empty,
+    EnumParam(capacity, 0, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+
+    DataRegion toRemove = (DataRegion){.first_index = 0, .last_index = 199};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_no_effect_when_region_far_from_single)
+  Test(remove_data_region_no_effect_when_region_far_from_single,
+    EnumParam(capacity, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 0, .last_index = 99};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toRemove = (DataRegion){.first_index = 10000, .last_index = 10999};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);
+    assert_int_eq(100, get_data_region_set_total_length(set));
+    assert_memory_eq(&existing, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_no_effect_when_adjacent_to_single)
+  Test(remove_data_region_no_effect_when_adjacent_to_single,
+    EnumParam(capacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 0, .last_index = 99};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toRemove =
+      toLeft ? (DataRegion){.first_index = existing.first_index - 100, .last_index = existing.first_index - 1}
+             : (DataRegion){.first_index = existing.last_index + 1, .last_index = existing.last_index + 100};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);
+    assert_int_eq(100, get_data_region_set_total_length(set));
+    assert_memory_eq(&existing, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlap_of_single)
+  Test(remove_data_region_overlap_of_single,
+    EnumParam(capacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 0, .last_index = 99};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toRemove =
+      toLeft ? (DataRegion){.first_index = existing.first_index - 10, .last_index = existing.first_index + 9}
+             : (DataRegion){.first_index = existing.last_index - 9, .last_index = existing.last_index + 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(1, set->count);
+    assert_int_eq(100-10, get_data_region_set_total_length(set));
+
+    DataRegion expect =
+      toLeft ? (DataRegion){.first_index = toRemove.last_index + 1, .last_index = existing.last_index}
+             : (DataRegion){.first_index = existing.first_index, .last_index = toRemove.first_index - 1};
+    assert_memory_eq(&expect, &set->regions[0], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlap_all_of_single)
+  Test(remove_data_region_overlap_all_of_single,
+    EnumParam(capacity, 1, 2, 3, 1000)
+    EnumParam(padding, 0, 1, 2, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 0, .last_index = 99};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toRemove = (DataRegion){.first_index = existing.first_index - padding, .last_index = existing.last_index + padding};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlap_middle_of_single)
+  Test(remove_data_region_overlap_equal_to_single,
+    EnumParam(capacity, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 0, .last_index = 99};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toRemove = (DataRegion){.first_index = existing.first_index, .last_index = existing.last_index};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlap_middle_of_single_fails_when_capacity_exceeded)
+  Test(remove_data_region_overlap_middle_of_single,
+    EnumParam(capacity, 2, 3, 4, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existing = (DataRegion){.first_index = 0, .last_index = 99};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existing));
+
+    DataRegion toRemove = (DataRegion){.first_index = existing.first_index + 10, .last_index = existing.last_index - 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(20, get_data_region_set_total_length(set));
+
+    DataRegion remainLeft = (DataRegion){.first_index = existing.first_index, .last_index = toRemove.first_index - 1};
+    DataRegion remainRight = (DataRegion){.first_index = toRemove.last_index + 1, .last_index = existing.last_index};
+    assert_memory_eq(&remainLeft, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&remainRight, &set->regions[1], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_no_effect_when_region_far_from_several)
+  Test(remove_data_region_overlap_middle_of_single_fails_when_capacity_exceeded,
+    EnumParam(capacity, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, capacity);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion reference = set->regions[set->count / 2];//Arbitrarily remove from middle region
+    DataRegion toRemove = (DataRegion){.first_index = reference.first_index + 3, .last_index = reference.last_index - 3};
+    assert_int_eq(DATA_REGION_SET_OUT_OF_SPACE, remove_data_region(set, toRemove));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(remove_data_region_overlap_of_one_of_several)
+  Test(remove_data_region_no_effect_when_region_far_from_several,
+    EnumParam(count, 2, 3, 4, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(count + 3, count);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion toRemove = (DataRegion){.first_index = -1000000, .last_index = -900000};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(remove_data_region_overlap_two_of_several)
+  Test(remove_data_region_overlap_of_one_of_several,
+    EnumParam(capacity, 3, 4, 1000)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+
+    DataRegion toRemove =
+      toLeft ? (DataRegion){.first_index = existingB.first_index - 10, .last_index = existingB.first_index + 9}
+             : (DataRegion){.first_index = existingB.last_index - 9, .last_index = existingB.last_index + 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    DataRegion remaining =
+      toLeft ? (DataRegion){.first_index = toRemove.last_index + 1, .last_index = existingB.last_index}
+             : (DataRegion){.first_index = existingB.first_index, .last_index = toRemove.first_index - 1};
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(3, set->count);
+    assert_int_eq(100+100+90, get_data_region_set_total_length(set));
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&remaining, &set->regions[1], sizeof(DataRegion));
+    assert_memory_eq(&existingC, &set->regions[2], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlap_middle_of_one_of_several)
+  Test(remove_data_region_equal_to_one_of_several,
+    EnumParam(capacity, 3, 4, 5, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.first_index, .last_index = existingB.last_index};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100, get_data_region_set_total_length(set));
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&existingC, &set->regions[1], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlap_middle_of_one_of_several_fails_when_capacity_exceeded)
+  Test(remove_data_region_overlap_partially_two_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.last_index - 9, .last_index = existingC.first_index + 9};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(4, set->count);
+    assert_int_eq(100+90+90+100, get_data_region_set_total_length(set));
+
+    DataRegion cropB = (DataRegion){.first_index = existingB.first_index, .last_index = toRemove.first_index - 1};
+    DataRegion cropC = (DataRegion){.first_index = toRemove.last_index + 1, .last_index = existingC.last_index};
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&cropB, &set->regions[1], sizeof(DataRegion));
+    assert_memory_eq(&cropC, &set->regions[2], sizeof(DataRegion));
+    assert_memory_eq(&existingD, &set->regions[3], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_no_effect_when_adjacent_to_one_of_several)
+  Test(remove_data_region_overlap_totally_two_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000)
+    EnumParam(padding, 0, 1, 2, 3, 25))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.first_index - padding, .last_index = existingC.last_index + padding};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100, get_data_region_set_total_length(set));
+
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&existingD, &set->regions[1], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_no_effect_when_adjacent_to_two_of_several)
+  Test(remove_data_region_strictly_contain_two_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.first_index, .last_index = existingC.last_index};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(2, set->count);
+    assert_int_eq(100+100, get_data_region_set_total_length(set));
+
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&existingD, &set->regions[1], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_overlaps_all_of_several)
+  Test(remove_data_region_totally_contain_all_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000)
+    EnumParam(padding, 0, 1, 2, 3, 25))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingA.first_index - padding, .last_index = existingD.last_index + padding};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, get_data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(remove_data_region_overlap_middle_of_one_of_several,
+    EnumParam(capacity, 5, 6, 7, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.first_index + 10, .last_index = existingB.last_index - 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(5, set->count);
+    assert_int_eq(100+10+10+100+100, get_data_region_set_total_length(set));
+
+    DataRegion bLeft = (DataRegion){.first_index = existingB.first_index, .last_index = toRemove.first_index - 1};
+    DataRegion bRight = (DataRegion){.first_index = toRemove.last_index + 1, .last_index = existingB.last_index};
+
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&bLeft, &set->regions[1], sizeof(DataRegion));
+    assert_memory_eq(&bRight, &set->regions[2], sizeof(DataRegion));
+    assert_memory_eq(&existingC, &set->regions[3], sizeof(DataRegion));
+    assert_memory_eq(&existingD, &set->regions[4], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(remove_data_region_overlap_middle_of_one_of_several_fails_when_capacity_exceeded,
+    EnumParam(capacity, 4, 5, 6, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, capacity);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    //Try to remove the middle portion of a region
+    DataRegion reference = set->regions[set->count / 2];//Arbitrarily pick middle
+    DataRegion toRemove = (DataRegion){.first_index = reference.first_index + 3, .last_index = reference.last_index - 3};
+    assert_int_eq(DATA_REGION_SET_OUT_OF_SPACE, remove_data_region(set, toRemove));
+
+    //Check that nothing changed
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
+
+  Test(remove_data_region_no_effect_when_adjacent_to_one_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000)
+    EnumParam(relativeOffset, 0, 1, 2, 3)
+    EnumParam(toLeft, 0, 1))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 4);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion relative = set->regions[relativeOffset];
+    DataRegion toRemove =
+      toLeft ? (DataRegion){.first_index = relative.first_index - 10, .last_index = relative.first_index - 1}
+             : (DataRegion){.first_index = relative.last_index + 1, .last_index = relative.last_index + 10};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
+
+  Test(remove_data_region_no_effect_when_adjacent_to_two_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.last_index + 1, .last_index = existingC.first_index - 1};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(4, set->count);
+    assert_int_eq(100+100+100+100, get_data_region_set_total_length(set));
+
+
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&existingB, &set->regions[1], sizeof(DataRegion));
+    assert_memory_eq(&existingC, &set->regions[2], sizeof(DataRegion));
+    assert_memory_eq(&existingD, &set->regions[3], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(remove_data_region_overlaps_three_of_several,
+    EnumParam(capacity, 4, 5, 6, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    DataRegion existingA = (DataRegion){.first_index = 100, .last_index = 199};
+    DataRegion existingB = (DataRegion){.first_index = 300, .last_index = 399};
+    DataRegion existingC = (DataRegion){.first_index = 500, .last_index = 599};
+    DataRegion existingD = (DataRegion){.first_index = 700, .last_index = 799};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingA));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingB));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingC));
+    assert_int_eq(DATA_REGION_SET_SUCCESS, add_data_region(set, existingD));
+
+    DataRegion toRemove = (DataRegion){.first_index = existingB.last_index - 9, .last_index = existingC.first_index + 9};
+    assert_int_eq(DATA_REGION_SET_SUCCESS, remove_data_region(set, toRemove));
+
+    assert_int_eq(capacity, set->capacity);
+    assert_int_eq(4, set->count);
+    assert_int_eq(100+90+90+100, get_data_region_set_total_length(set));
+
+    DataRegion cropB = (DataRegion){.first_index = existingB.first_index, .last_index = toRemove.first_index - 1};
+    DataRegion cropC = (DataRegion){.first_index = toRemove.last_index + 1, .last_index = existingC.last_index};
+    assert_memory_eq(&existingA, &set->regions[0], sizeof(DataRegion));
+    assert_memory_eq(&cropB, &set->regions[1], sizeof(DataRegion));
+    assert_memory_eq(&cropC, &set->regions[2], sizeof(DataRegion));
+    assert_memory_eq(&existingD, &set->regions[3], sizeof(DataRegion));
+
+    free_test_data_region_set(set);
   }
 
   Test(remove_data_region_several_scenarios)
@@ -1498,6 +1981,8 @@ BEGIN_TEST_SUITE(DataRegionSetGetMissingDataRegionsTests)
   {
     assert_fail("Not Implemented");
   }
+
+  //TODO: Also test 'edge' cases (literal edge cases, the endpoints, that is, things can go wrong at the first and last region, test against these!)
 
   Test(get_missing_data_regions_several_scenarios)
   {
