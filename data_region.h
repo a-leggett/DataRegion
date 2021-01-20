@@ -282,23 +282,23 @@ DataRegionSetResult remove_data_region(DataRegionSet* set, DataRegion toRemove)
 
 int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const DataRegionSet* src, DataRegion boundaryRegion, int* dstTooSmall)
 {
+  int dstTooSmallPlaceholder;
+  if(dstTooSmall == NULL)
+    dstTooSmall = &dstTooSmallPlaceholder;
+  *dstTooSmall = 0;
+
   if(src == NULL)
     return 0;
   if(!is_data_region_valid(boundaryRegion))
     return 0;
 
-  int dstTooSmallPlaceholder;
-  if(dstTooSmall == NULL)
-    dstTooSmall = &dstTooSmallPlaceholder;
-
   if(dstCapacity < 0)
   {
     //Cannot have a negative destination capacity
-    *dstTooSmall = 0;
+    *dstTooSmall = 1;
     return 0;
   }
 
-  *dstTooSmall = 0;
   int64_t count = 0;
   for (int64_t i = 0; i < src->count; i++)
   {
@@ -336,7 +336,7 @@ int64_t get_bounded_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
         }
         else
         {
-          *dstTooSmall = 1;//TODO: Definitely test this
+          *dstTooSmall = 1;
           break;
         }
       }
@@ -366,16 +366,17 @@ int64_t count_bounded_data_regions(const DataRegionSet* src, DataRegion boundary
 
 int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const DataRegionSet* src, DataRegion boundaryRegion, int* dstTooSmall)
 {
+  int dstTooSmallPlaceholder;
+  if (dstTooSmall == NULL)
+    dstTooSmall = &dstTooSmallPlaceholder;
+  *dstTooSmall = 0;
+
   if(dst == NULL)
     return 0;
   if(src == NULL)
     return 0;
   if(!is_data_region_valid(boundaryRegion))
     return 0;
-
-  int dstTooSmallPlaceholder;
-  if (dstTooSmall == NULL)
-    dstTooSmall = &dstTooSmallPlaceholder;
 
   if(dstCapacity < 0)
   {
@@ -388,7 +389,6 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
   dstSet.capacity = dstCapacity;
   dstSet.count = 0;
 
-  *dstTooSmall = 0;
   int64_t count = 0;
   if (add_data_region(&dstSet, boundaryRegion))
   {
