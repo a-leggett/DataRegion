@@ -48,6 +48,57 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
 
 #define free_clone_data_region_set(set) free_data_region_set(set)
 
+#define assert_add_data_region(dst, firstIndex, lastIndex)                    \
+{                                                                             \
+  DataRegion _local_region = (DataRegion){.first_index = (firstIndex),        \
+    .last_index = (lastIndex)};                                               \
+  DataRegionSetResult _local_add_result = add_data_region(dst, _local_region);\
+  assert_message_format(_local_add_result == DATA_REGION_SET_SUCCESS,         \
+    "Failed to add a data region. Expected %i, but the result was %i.",       \
+    DATA_REGION_SET_SUCCESS,                                                  \
+    _local_add_result);                                                       \
+}
+
+#define assert_remove_data_region(set, firstIndex, lastIndex)                 \
+{                                                                             \
+  DataRegion _local_region = (DataRegion){.first_index = (firstIndex),        \
+    .last_index = (lastIndex)};                                               \
+  DataRegionSetResult _local_remove_result = remove_data_region(set,          \
+    _local_region);                                                           \
+  assert_message_format(_local_remove_result == DATA_REGION_SET_SUCCESS,      \
+    "Failed to remove a data region. Expected %i, but the result was %i.",    \
+    DATA_REGION_SET_SUCCESS,                                                  \
+    _local_remove_result);                                                    \
+}
+
+#define DR(firstIndex, lastIndex) ((DataRegion){.first_index = (firstIndex),  \
+  .last_index = (lastIndex)})
+
+#define assert_data_region_set_eq_array(set, ...)                             \
+{                                                                             \
+  DataRegion _local_regions[] = {                                             \
+    __VA_ARGS__                                                               \
+  };                                                                          \
+  size_t _local_count = sizeof(_local_regions)/sizeof(_local_regions[0]);     \
+  assert_message_format(_local_count == set->count,                           \
+    "Expected the DataRegionSet to contain %"PRIu64" regions, but it contained %"PRIu64".", \
+    _local_count, set->count);                                                \
+  for(int64_t i = 0; i < set->count; i++)                                     \
+  {                                                                           \
+    assert_message_format(                                                    \
+       set->regions[i].first_index == _local_regions[i].first_index           \
+    && set->regions[i].last_index == _local_regions[i].last_index,            \
+      "Expected the data region at index %"PRId64" to be (%"PRId64", "        \
+      "%"PRId64"), but the actual region was (%"PRId64", %"PRId64")",         \
+      i,                                                                      \
+      _local_regions[i].first_index,                                          \
+      _local_regions[i].last_index,                                           \
+      set->regions[i].first_index,                                            \
+      set->regions[i].last_index                                              \
+    );                                                                        \
+  }                                                                           \
+}
+
 BEGIN_TEST_SUITE(DataRegionSetInitialization)
 
   Test(create_data_region_set_in_when_dst_is_null,
@@ -1805,9 +1856,12 @@ BEGIN_TEST_SUITE(DataRegionSetRemoveTests)
     free_test_data_region_set(set);
   }
 
-  Test(remove_data_region_several_scenarios)
+  Test(remove_data_region_several_scenarios,
+    EnumParam(capacity, 10, 11, 12, 1000))
   {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
     assert_fail("Not Implemented");
+    free_test_data_region_set(set);
   }
 
 END_TEST_SUITE()
