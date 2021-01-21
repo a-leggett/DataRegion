@@ -1,6 +1,5 @@
 #ifndef DATA_REGION_H
 #define DATA_REGION_H
-#include <assert.h>//TODO: I'm REALLY on the fence about including asserts. It would be nice to catch assert failures in debug (particularly helpful is app code sends wrong args... Maybe have return codes for such cases? But what about things that already have return codes, like combine_data_regions?)
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -82,10 +81,6 @@ int is_data_region_valid(DataRegion region)
 
 DataRegion combine_data_regions(DataRegion a, DataRegion b)
 {
-  assert(is_data_region_valid(a));
-  assert(is_data_region_valid(b));
-  assert(can_combine_data_regions(a, b));
-
   DataRegion ret;
 
   ret.first_index = a.first_index;
@@ -113,10 +108,6 @@ int64_t get_data_region_set_total_length(const DataRegionSet* set)
 
 void internal_remove_data_region_at(DataRegionSet* set, int64_t index)
 {
-  assert(set != NULL);
-  assert(index >= 0);
-  assert(index < set->count);
-
   //Move all values 'up' after the remove index
   for (int64_t i = index; i < set->count - 1; i++)
     set->regions[i] = set->regions[i + 1];
@@ -126,12 +117,6 @@ void internal_remove_data_region_at(DataRegionSet* set, int64_t index)
 
 void internal_insert_data_region_at(DataRegionSet* set, DataRegion toInsert, int64_t index)
 {
-  assert(set != NULL);
-  assert(is_data_region_valid(toInsert));
-  assert(index >= 0);
-  assert(set->count < set->capacity);
-  assert(index <= set->count);//index==count when adding to end
-
   //Move all values 'down' after the insert index
   for (int64_t i = set->count; i > index; i--)
     set->regions[i] = set->regions[i - 1];
