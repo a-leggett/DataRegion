@@ -423,7 +423,9 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
         if (remove_data_region(&dstSet, toRemove) != DATA_REGION_SET_SUCCESS)
         {
           *dstTooSmall = 1;
-          break;
+          //The regions stored in 'dst' are not correct, the latest region needs to be split but there isn't enough capacity.
+          //So instead of returning the capacity, return zero to indicate that it's incomplete.
+          return 0;
         }
       }
     }
