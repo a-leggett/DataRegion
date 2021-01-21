@@ -15,6 +15,7 @@ typedef struct DataRegionSet
   DataRegion* regions;
   int64_t count;
   int64_t capacity;
+  int64_t total_length;
 } DataRegionSet;
 
 DataRegionSet* create_data_region_set_in(void* dst, int64_t dstSize)
@@ -31,6 +32,7 @@ DataRegionSet* create_data_region_set_in(void* dst, int64_t dstSize)
   set->regions = (DataRegion*)((uint8_t*)dst + sizeof(DataRegionSet));
   set->capacity = numRegions;
   set->count = 0;
+  set->total_length = 0;
   return set;
 }
 
@@ -96,23 +98,21 @@ DataRegion combine_data_regions(DataRegion a, DataRegion b)
 
 int64_t get_data_region_set_total_length(const DataRegionSet* set)
 {
-  //TODO: Optimize this to be a field of 'DataRegionSet', updated O(1) upon add/remove.
   if(set == NULL)
     return 0;
-
-  int64_t total = 0;
-  for(int64_t i = 0; i < set->count; i++)
-    total += get_data_region_length(set->regions[i]);
-  return total;
+  else
+    return set->total_length;
 }
 
 void internal_remove_data_region_at(DataRegionSet* set, int64_t index)
 {
+  int64_t removeLength = get_data_region_length(set->regions[index]);
   //Move all values 'up' after the remove index
   for (int64_t i = index; i < set->count - 1; i++)
     set->regions[i] = set->regions[i + 1];
 
   set->count--;
+  set->total_length -= removeLength;
 }
 
 void internal_insert_data_region_at(DataRegionSet* set, DataRegion toInsert, int64_t index)
@@ -124,6 +124,7 @@ void internal_insert_data_region_at(DataRegionSet* set, DataRegion toInsert, int
   //Insert the DataRegion to the specified index
   set->regions[index] = toInsert;
   set->count++;
+  set->total_length += get_data_region_length(toInsert);
 }
 
 typedef enum DataRegionSetResult

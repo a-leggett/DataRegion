@@ -26,6 +26,7 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
 {
   DataRegionSet* ret = create_data_region_set(set->capacity);
   ret->count = set->count;
+  ret->total_length = get_data_region_set_total_length(set);
   for(int64_t i = 0; i < set->count; i++)
     ret->regions[i] = set->regions[i];
   return ret;
