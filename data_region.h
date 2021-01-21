@@ -388,9 +388,9 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
   dstSet.regions = dst;
   dstSet.capacity = dstCapacity;
   dstSet.count = 0;
+  //TODO: Make sure this is up to date on initialization (maybe create an init function), as we expect to add a 'total_length' field that should be initialized to zero here.
 
-  int64_t count = 0;
-  if (add_data_region(&dstSet, boundaryRegion))
+  if (add_data_region(&dstSet, boundaryRegion) == DATA_REGION_SET_SUCCESS)
   {
     for (int64_t i = 0; i < src->count; i++)
     {
@@ -420,7 +420,7 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
 
       if (doRemoveCurrent)
       {
-        if (!remove_data_region(&dstSet, toRemove))
+        if (remove_data_region(&dstSet, toRemove) != DATA_REGION_SET_SUCCESS)
         {
           *dstTooSmall = 1;
           break;
@@ -428,7 +428,7 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
       }
     }
 
-    return count;
+    return dstSet.count;
   }
   else
   {
