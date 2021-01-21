@@ -31,6 +31,25 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
   return ret;
 }
 
+#define assert_data_region_array_eq(array, ...)                               \
+{                                                                             \
+  DataRegion _local_expect[] = {__VA_ARGS__};                                 \
+  size_t _local_expect_count = sizeof(_local_expect)/sizeof(_local_expect[0]);\
+  for(uint64_t i = 0; i < _local_expect_count; i++)                           \
+  {                                                                           \
+    assert_message_format(                                                    \
+         _local_expect[i].first_index == array[i].first_index                 \
+      && _local_expect[i].last_index == array[i].last_index,                  \
+      "Expected "#array"[%"PRIu64"] to be (%"PRId64", %"PRId64"), but the "   \
+      "actual value was (%"PRId64", %"PRId64").",                             \
+      i,                                                                      \
+      _local_expect[i].first_index,                                           \
+      _local_expect[i].last_index,                                            \
+      array[i].first_index,                                                   \
+      array[i].last_index);                                                   \
+  }                                                                           \
+}
+
 #define assert_data_region_set_eq(expected, actual)                           \
 {                                                                             \
   const DataRegionSet* _local_exp = (expected);                               \
@@ -83,6 +102,7 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
   assert_message_format(_local_count == set->count,                           \
     "Expected the DataRegionSet to contain %"PRIu64" regions, but it contained %"PRIu64".", \
     _local_count, set->count);                                                \
+  int64_t _local_total_length = 0;                                            \
   for(int64_t i = 0; i < set->count; i++)                                     \
   {                                                                           \
     assert_message_format(                                                    \
@@ -96,7 +116,13 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
       set->regions[i].first_index,                                            \
       set->regions[i].last_index                                              \
     );                                                                        \
+    _local_total_length += get_data_region_length(_local_regions[i]);         \
   }                                                                           \
+  int64_t _local_actual_length = get_data_region_set_total_length(set);       \
+  assert_message_format(_local_total_length == _local_actual_length,          \
+    "Expected the total length to equal %"PRId64", but it was %"PRId64".",    \
+    _local_total_length,                                                      \
+    _local_actual_length);                                                    \
 }
 
 BEGIN_TEST_SUITE(DataRegionSetInitialization)
@@ -1334,9 +1360,107 @@ Test(add_data_region_partially_overlapping_one_of_two_existing,
     free_test_data_region_set(set);
   }
 
-  Test(add_data_region_many_scenarios)
+  Test(add_data_region_many_non_combinable,
+    EnumParam(capacity, 5, 6, 7, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    assert_add_data_region(set, -1000, -900);
+    assert_add_data_region(set, 0, 100);
+    assert_add_data_region(set, 150, 159);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 449);
+
+    assert_data_region_set_eq_array(set, DR(-1000, -900), DR(0, 100), DR(150, 159), DR(200, 299), DR(400, 449));
+  }
+
+  Test(add_data_region_many_scenarios,
+    EnumParam(capacity, 5, 6, 7, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+
+    assert_add_data_region(set, 0, 0);
+    assert_add_data_region(set, 1, 1);//Should be combined with left region at (0,0)
+    assert_data_region_set_eq_array(set, DR(0, 1));
+
+    assert_add_data_region(set, 5, 5);
+    assert_add_data_region(set, 4, 4);//Should be combined with right region at (5,5)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 5));
+
+    assert_add_data_region(set, 6, 6);//Should be combined with left region at (4,5)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6));
+
+    assert_add_data_region(set, 13, 17);
+    assert_add_data_region(set, 9, 12);//Should be combined with right region at (13,17)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 9, 17);//Should have no effect since the exact region already exists
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 9, 9);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 9, 10);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 9, 13);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 10, 10);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 10, 11);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 11, 11);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 11, 12);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 11, 17);//Should have no effect since the region was already contained
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17));
+
+    assert_add_data_region(set, 100, 150);
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(100, 150));
+
+    assert_add_data_region(set, 99, 151);//Should be combined with (100, 150) since it contains all of this region
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(99, 151));
+
+    assert_add_data_region(set, 95, 155);//Should be combined with (99, 151) since it contains all of this region
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(95, 155));
+
+    assert_add_data_region(set, 90, 95);//Should be combined with (95, 155) due to intersection at (95, 95)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(90, 155));
+
+    assert_add_data_region(set, 85, 100);//Should be combined with (90, 155) due to intersection at (90, 100)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(85, 155));
+
+    assert_add_data_region(set, 100, 200);//Should be combined with (85, 155) due to intersection at (100, 155)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(85, 200));
+
+    assert_add_data_region(set, 200, 300);//Should be combined with (85, 200) due to intersection at (200, 200)
+    assert_data_region_set_eq_array(set, DR(0, 1), DR(4, 6), DR(9, 17), DR(85, 300));
+
+    assert_add_data_region(set, 0, 6);//Should be combined with (0, 1) AND (4, 6)
+    assert_data_region_set_eq_array(set, DR(0, 6), DR(9, 17), DR(85, 300));
+
+    assert_add_data_region(set, 7, 8);//Should be combined with (0, 6) AND (9, 17)
+    assert_data_region_set_eq_array(set, DR(0, 17), DR(85, 300));
+
+    assert_add_data_region(set, 18, 84);//Should be combined with (0, 17) AND (85, 300)
+    assert_data_region_set_eq_array(set, DR(0, 300));
+
+    assert_add_data_region(set, 500, 600);
+    assert_add_data_region(set, 900, 1200);
+    assert_add_data_region(set, 1500, 2000);
+    assert_add_data_region(set, 2300, 2500);
+
+    assert_data_region_set_eq_array(set, DR(0, 300), DR(500, 600), DR(900, 1200), DR(1500, 2000), DR(2300, 2500));
+
+    assert_add_data_region(set, 250, 2400);//Should combine with all
+    assert_data_region_set_eq_array(set, DR(0, 2500));
+
+    free_test_data_region_set(set);
   }
 
   Test(add_data_region_fails_when_full_capacity_and_no_overlap,
@@ -1857,10 +1981,55 @@ BEGIN_TEST_SUITE(DataRegionSetRemoveTests)
   }
 
   Test(remove_data_region_several_scenarios,
-    EnumParam(capacity, 10, 11, 12, 1000))
+    EnumParam(capacity, 4, 5, 6, 1000))
   {
     DataRegionSet* set = create_test_data_region_set(capacity, 0);
-    assert_fail("Not Implemented");
+
+    assert_add_data_region(set, 0, 1000);
+    assert_remove_data_region(set, 0, 1000);//Should remove the whole thing
+    assert_int_eq(0, set->count);
+
+    assert_remove_data_region(set, 0, 1000);//Should have no effect
+    assert_int_eq(0, set->count);
+
+    assert_add_data_region(set, 0, 1000);
+    assert_remove_data_region(set, 0, 0);//Should remove intersecting region at (0,0)
+    assert_data_region_set_eq_array(set, DR(1,1000));
+
+    assert_remove_data_region(set, 1, 1);//Should remove intersecting region at (1,1)
+    assert_data_region_set_eq_array(set, DR(2, 1000));
+
+    assert_remove_data_region(set, 1000, 1000);//Should remove intersecting region at (1000,1000)
+    assert_data_region_set_eq_array(set, DR(2, 999));
+
+    assert_remove_data_region(set, 0, 5);//Should remove intersecting region at (2,5)
+    assert_data_region_set_eq_array(set, DR(6, 999));
+
+    assert_remove_data_region(set, 950, 1500);//Should remove intersecting region at (950, 999)
+    assert_data_region_set_eq_array(set, DR(6, 949));
+
+    assert_remove_data_region(set, 12, 12);//Should remove intersecting region at (12,12)
+    assert_data_region_set_eq_array(set, DR(6, 11), DR(13, 949));
+
+    assert_remove_data_region(set, 100, 120);//Should remove intersecting region at (100, 120)
+    assert_data_region_set_eq_array(set, DR(6, 11), DR(13, 99), DR(121, 949));
+
+    assert_remove_data_region(set, 200, 300);//Should remove intersecting region at (200, 300)
+    assert_data_region_set_eq_array(set, DR(6, 11), DR(13, 99), DR(121, 199), DR(301, 949));
+
+    assert_remove_data_region(set, 95, 250);//Should remove intersecting region at (95, 99) AND (121, 199)
+    assert_data_region_set_eq_array(set, DR(6, 11), DR(13, 94), DR(301, 949));
+
+    assert_remove_data_region(set, 8, 948);//Should remove intersecting region at (8,11) AND (13, 94) AND (301, 948)
+    assert_data_region_set_eq_array(set, DR(6, 7), DR(949, 949));
+
+    assert_remove_data_region(set, 8, 948);//Should not change anything
+    assert_data_region_set_eq_array(set, DR(6, 7), DR(949, 949));
+
+    assert_remove_data_region(set, 0, 100000000);
+    assert_int_eq(0, set->count);
+    assert_int_eq(capacity, set->capacity);
+
     free_test_data_region_set(set);
   }
 
@@ -1868,92 +2037,584 @@ END_TEST_SUITE()
 
 BEGIN_TEST_SUITE(DataRegionSetGetBoundedDataRegionsTests)
 
-  //TODO: All of these tests need to run case where 'dstTooSmall' is NULL or non-NULL
-  //TODO: Also, all of these tests need to call count_bounded_data_regions to verify
-
-  Test(get_bounded_data_regions_when_src_NULL)
+  Test(get_bounded_data_regions_when_src_NULL,
+    EnumParam(nullDstOverflow, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * 100);
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+    assert_int_eq(0, get_bounded_data_regions(dst, 100, NULL, (DataRegion){.first_index = 0, .last_index = 100}, dstTooSmallPtr));
+
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    gid_free(dst);
   }
 
-  Test(get_bounded_data_regions_when_boundary_is_invalid)
+  Test(get_bounded_data_regions_when_dst_NULL,
+    EnumParam(nullDstOverflow, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(100, 100);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+    assert_int_eq(100, get_bounded_data_regions(NULL, 0, set, DR(0, 1000000), dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_contains_nothing)
+  Test(get_bounded_data_regions_when_dstCapacity_negative,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, -1, -2, -3, -1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(100, 100);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+    assert_int_eq(0, get_bounded_data_regions(dst, dstCapacity, set, DR(0, 1000000), dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_adjacent_to_single)
+  Test(get_bounded_data_regions_when_boundary_is_invalid,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 0, 1, 2, 100))
   {
-      assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(100, 100);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion badBounds = DR(1000, 0);
+    assert_int_eq(0, get_bounded_data_regions(dst, dstCapacity, set, badBounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that 'count' has the same results
+    assert_int_eq(0, count_bounded_data_regions(set, badBounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_adjacent_to_several)
+  Test(get_bounded_data_regions_when_src_is_empty,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 0, 1, 2, 100)
+    EnumParam(srcCapacity, 0, 1, 2, 100))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(srcCapacity, 0);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(0, 1000);
+    assert_int_eq(0, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that 'count' has the same results
+    assert_int_eq(0, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_partially_overlaps_single)
+  Test(get_bounded_data_regions_when_boundary_contains_nothing,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 0, 1, 2, 100)
+    IntRow(-1000, -900)
+    IntRow(-100, -1)
+    IntRow(100, 100)
+    IntRow(100, 110)
+    IntRow(110, 120)
+    IntRow(100, 199)
+    IntRow(300, 310)
+    IntRow(301, 320)
+    IntRow(300, 399)
+    IntRow(350, 399)
+    IntRow(550, 599)
+    IntRow(700, 700)
+    IntRow(700, 710)
+    IntRow(710, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(int_row[0], int_row[1]);
+    assert_int_eq(0, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that 'count' has the same results
+    assert_int_eq(0, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_partially_overlaps_several)
+  Test(get_bounded_data_regions_when_boundary_partially_overlaps_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(1, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegion single = set->regions[0];
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds =
+      toLeft ? DR(single.first_index - 10, single.first_index + 10)
+             : DR(single.last_index - 10, single.last_index + 10);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    DataRegion expect =
+      toLeft ? DR(single.first_index, bounds.last_index)
+             : DR(bounds.first_index, single.last_index);
+    assert_memory_eq(&expect, &dst[0], sizeof(DataRegion));
+
+    //Check that 'count' has the same results
+    assert_int_eq(1, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_totally_overlaps_single)
+  Test(get_bounded_data_regions_when_boundary_partially_overlaps_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(250, 449);
+    assert_int_eq(2, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    assert_memory_eq(&DR(250, 299), &dst[0], sizeof(DataRegion));
+    assert_memory_eq(&DR(400, 449), &dst[1], sizeof(DataRegion));
+
+    //Check that 'count' has the same results
+    assert_int_eq(2, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_totally_overlaps_one_and_partially_overlaps_other_of_several)
+  Test(get_bounded_data_regions_when_boundary_totally_overlaps_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(1, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegion single = set->regions[0];
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(-1000, 1000);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    assert_memory_eq(&single, &dst[0], sizeof(DataRegion));
+
+    //Check that 'count' has the same results
+    assert_int_eq(1, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_totally_overlaps_several)
+  Test(get_bounded_data_regions_when_boundary_totally_overlaps_one_and_partially_overlaps_other_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 3, 4, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(50, 449);
+    assert_int_eq(3, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    assert_memory_eq(&DR(50, 99), &dst[0], sizeof(DataRegion));
+    assert_memory_eq(&DR(200, 299), &dst[1], sizeof(DataRegion));
+    assert_memory_eq(&DR(400, 449), &dst[2], sizeof(DataRegion));
+
+    //Check that 'count' has the same results
+    assert_int_eq(3, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_is_subset_of_single)
+  Test(get_bounded_data_regions_when_boundary_totally_overlaps_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 3, 4, 1000)
+    EnumParam(padding, 0, 1, 2, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index - padding, set->regions[2].last_index + padding);
+    assert_int_eq(3, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, set->regions[0], set->regions[1], set->regions[2]);
+
+    //Check that 'count' has the same results
+    assert_int_eq(3, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_when_boundary_is_subset_of_one_of_several)
+  Test(get_bounded_data_regions_when_boundary_is_subset_of_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 100)
+    EnumParam(padding, 0, 1, 2, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(1, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index + padding, set->regions[0].last_index - padding);
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, bounds);
+
+    //Check that 'count' has the same results
+    assert_int_eq(1, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_superset_boundary_of_single)
+  Test(get_bounded_data_regions_when_boundary_is_subset_of_one_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 100)
+    EnumParam(padding, 0, 1, 2, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[1].first_index + padding, set->regions[1].last_index - padding);
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, bounds);
+
+    //Check that 'count' has the same results
+    assert_int_eq(1, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_superset_boundary_of_several)
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_superset_boundary_of_single,
+    EnumParam(nullDstOverflow, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(1, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index - 10, set->regions[0].last_index + 10);
+    assert_int_eq(0, get_bounded_data_regions(dst, 0, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+
+    //Check that 'count' has the correct number
+    assert_int_eq(1, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_overlap_boundary_of_single)
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_superset_boundary_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    RangeParam(deficit, 1, 4))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+    DataRegionSet* clone = clone_data_region_set(set);
+    int64_t dstCapacity = 4 - deficit;
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index - 10, set->regions[3].last_index + 10);
+    assert_int_eq(dstCapacity, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+    assert_memory_eq(dst, set->regions, sizeof(DataRegion) * dstCapacity);
+
+    //Check that 'count' has the correct results
+    assert_int_eq(4, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_overlap_boundary_of_several)
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_overlap_boundary_of_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(padding, 0, 1, 2, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(1, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index - padding, set->regions[0].last_index + padding);
+    assert_int_eq(0, get_bounded_data_regions(dst, 0, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+
+    //Check that 'count' has the correct number
+    assert_int_eq(1, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
+
+  Test(get_bounded_data_regions_fails_when_capacity_exceeded_by_overlap_boundary_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(padding, 0, 1, 2, 10)
+    RangeParam(deficit, 1, 4))
+  {
+    DataRegionSet* set = create_test_data_region_set(4, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 200, 299);
+    assert_add_data_region(set, 400, 499);
+    assert_add_data_region(set, 600, 699);
+    DataRegionSet* clone = clone_data_region_set(set);
+    int64_t dstCapacity = 4 - deficit;
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index - padding, set->regions[3].last_index + padding);
+    assert_int_eq(dstCapacity, get_bounded_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+    assert_memory_eq(dst, set->regions, sizeof(DataRegion) * dstCapacity);
+
+    //Check that 'count' has the correct results
+    assert_int_eq(4, count_bounded_data_regions(set, bounds));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
   Test(get_bounded_data_regions_several_scenarios)
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(3, 0);
+    int dstCapacity = 3;
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    assert_add_data_region(set, 100, 100);
+    assert_add_data_region(set, 200, 300);
+    assert_add_data_region(set, 400, 450);
+
+    int dstTooSmall = 5;//Initial garbage value
+    assert_int_eq(3, get_bounded_data_regions(dst, dstCapacity, set, DR(0, 500), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100), DR(200, 300), DR(400, 450));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(100, 100), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(99, 101), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(2, get_bounded_data_regions(dst, dstCapacity, set, DR(100, 200), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100), DR(200, 200));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(2, get_bounded_data_regions(dst, dstCapacity, set, DR(100, 202), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100), DR(200, 202));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(2, get_bounded_data_regions(dst, dstCapacity, set, DR(99, 200), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100), DR(200, 200));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(2, get_bounded_data_regions(dst, dstCapacity, set, DR(98, 202), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(100, 100), DR(200, 202));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(200, 300), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(200, 300));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(201, 299), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(201, 299));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(210, 250), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(210, 250));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(0, get_bounded_data_regions(dst, dstCapacity, set, DR(350, 375), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(350, 410), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(400, 410));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_bounded_data_regions(dst, dstCapacity, set, DR(350, 1500), &dstTooSmall));
+    assert_data_region_array_eq(dst, DR(400, 450));
+    assert_int_eq(0, dstTooSmall);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
   }
 
 END_TEST_SUITE()
@@ -1961,86 +2622,610 @@ END_TEST_SUITE()
 
 BEGIN_TEST_SUITE(DataRegionSetGetMissingDataRegionsTests)
 
-  Test(get_missing_data_regions_when_dst_NULL)
+  Test(get_missing_data_regions_when_dst_NULL,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(count, 1, 2, 3, 1000)
+    EnumParam(dstCapacity, 1, 2, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(count, count);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    assert_int_eq(0, get_missing_data_regions(NULL, dstCapacity, set, DR(-1000000, 1000000), dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_clone_data_region_set(clone);
+    free_test_data_region_set(set);
   }
 
-  Test(get_missing_data_regions_when_src_NULL)
+  Test(get_missing_data_regions_when_dstCapacity_negative,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(count, 1, 2, 3, 1000)
+    EnumParam(dstCapacity, -1, -2, -3, -10000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(count, count);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(-1000000, 1000000), dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_clone_data_region_set(clone);
+    free_test_data_region_set(set);
   }
 
-  Test(get_missing_data_regions_when_boundary_invalid)
+  Test(get_missing_data_regions_when_src_NULL,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 0, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion* dst = gid_malloc(0);//Allocate nothing because we expect it to fail
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, NULL, DR(-1000000, 1000000), dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    gid_free(dst);
   }
 
-  Test(get_missing_data_regions_when_src_empty)
+  Test(get_missing_data_regions_when_boundary_invalid,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(count, 0, 1, 2, 3, 1000)
+    EnumParam(dstCapacity, 0, 1, 2, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(count, count);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(1000000, 1), dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_clone_data_region_set(clone);
+    free_test_data_region_set(set);
   }
 
-  Test(get_missing_data_regions_when_dst_capacity_zero)
+  Test(get_missing_data_regions_when_src_empty,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 1000)
+    EnumParam(srcCapacity, 0, 1, 2, 1000)
+    IntRow(0, 0)
+    IntRow(0, 1)
+    IntRow(-1, 0)
+    IntRow(-1, 1)
+    IntRow(1, 100))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(srcCapacity, 0);
+    DataRegionSet* clone = clone_data_region_set(set);
+
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(int_row[0], int_row[1]);
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, bounds);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_contains_nothing)
+  Test(get_missing_data_regions_when_dst_capacity_zero_nothing_missing_in_bounds,
+    EnumParam(nullDstOverflow, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 1000000);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(1, 5);//Nothing missing in (1,5), so expect return 0
+    assert_int_eq(0, get_missing_data_regions(dst, 0, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+    //dstTooSmall is only true because the implementation needs at least one DataRegion
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_partially_contains_single)
+  Test(get_missing_data_regions_when_dst_capacity_zero_nothing_in_bounds,
+    EnumParam(nullDstOverflow, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(0);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(1, 5);//Nothing contained in (1,5)
+    assert_int_eq(0, get_missing_data_regions(dst, 0, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_partially_contains_one_of_several)
+  Test(get_missing_data_regions_when_boundary_contains_nothing,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 1000))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(1, 5);//Nothing contained in (1,5)
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, bounds);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_partially_contains_several)
+  Test(get_missing_data_regions_when_boundary_partially_contains_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 10, 19);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = toLeft ? DR(0, 14) : DR(15, 25);
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    DataRegion expect = toLeft ? DR(0, 9) : DR(20, 25);
+    assert_data_region_array_eq(dst, expect);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_is_proper_subset_of_single)
+  Test(get_missing_data_regions_when_boundary_partially_contains_one_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 1000)
+    EnumParam(toLeft, 0, 1)
+    RangeParam(relativeIndex, 0, 9))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 10);
+    DataRegion relative = set->regions[relativeIndex];
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = toLeft ? DR(relative.first_index - 5, relative.first_index + 5) : DR(relative.last_index - 5, relative.last_index + 5);
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    DataRegion expect = toLeft ? DR(bounds.first_index, relative.first_index - 1) : DR(relative.last_index + 1, bounds.last_index);
+    assert_data_region_array_eq(dst, expect);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_is_proper_subset_of_one_of_several)
+  Test(get_missing_data_regions_when_boundary_partially_contains_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 2, 3, 100)
+    EnumParam(padding, 0, 1, 2, 3, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 300, 399);
+    assert_add_data_region(set, 500, 599);
+    assert_add_data_region(set, 700, 799);
+    assert_add_data_region(set, 900, 999);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(300 + padding, 799 - padding);
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    assert_data_region_array_eq(dst, DR(400, 499), DR(600, 699));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_totally_contains_single)
+  Test(get_missing_data_regions_when_boundary_is_proper_subset_of_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 100)
+    EnumParam(padding, 0, 1, 2, 4))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index + padding, set->regions[0].last_index - padding);
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_totally_contains_one_of_several)
+  Test(get_missing_data_regions_when_boundary_is_proper_subset_of_one_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 1, 2, 3, 100)
+    EnumParam(padding, 0, 1, 2, 4)
+    RangeParam(relativeIndex, 0, 4))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 300, 399);
+    assert_add_data_region(set, 500, 599);
+    assert_add_data_region(set, 700, 799);
+    assert_add_data_region(set, 900, 999);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion relative = set->regions[relativeIndex];
+    DataRegion bounds = DR(relative.first_index + padding, relative.last_index - padding);
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_when_boundary_totally_contains_several)
+  Test(get_missing_data_regions_when_boundary_totally_contains_single,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 2, 3, 4, 100)
+    EnumParam(padding, 1, 2, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = DR(set->regions[0].first_index - 10, set->regions[0].last_index + 10);
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(bounds.first_index, set->regions[0].first_index - 1), DR(set->regions[0].last_index + 1, bounds.last_index));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  Test(get_missing_data_regions_stops_when_capacity_exceeded)
+  Test(get_missing_data_regions_when_boundary_totally_contains_single_equal_to_bounds,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 2, 3, 4, 100)
+    EnumParam(padding, 1, 2, 10))
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion bounds = set->regions[0];
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
   }
 
-  //TODO: Also test 'edge' cases (literal edge cases, the endpoints, that is, things can go wrong at the first and last region, test against these!)
+  Test(get_missing_data_regions_when_boundary_totally_contains_one_of_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 2, 3, 4, 100)
+    RangeParam(relativeIndex, 0, 4)
+    EnumParam(padding, 1, 2, 3))
+  {
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 300, 399);
+    assert_add_data_region(set, 500, 599);
+    assert_add_data_region(set, 700, 799);
+    assert_add_data_region(set, 900, 999);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion relative = set->regions[relativeIndex];
+    DataRegion bounds = DR(relative.first_index - padding, relative.last_index + padding);
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(bounds.first_index, relative.first_index - 1), DR(relative.last_index + 1, bounds.last_index));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
+
+  Test(get_missing_data_regions_when_boundary_totally_contains_several,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 4, 5, 6, 100)
+    EnumParam(padding, 1, 2, 3, 10))
+  {
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 300, 399);
+    assert_add_data_region(set, 500, 599);
+    assert_add_data_region(set, 700, 799);
+    assert_add_data_region(set, 900, 999);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion first = set->regions[1];
+    DataRegion last = set->regions[3];
+    DataRegion bounds = DR(first.first_index - padding, last.last_index + padding);
+    assert_int_eq(4, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(bounds.first_index, first.first_index - 1), DR(400, 499), DR(600, 699), DR(last.last_index + 1, bounds.last_index));
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
+
+  Test(get_missing_data_regions_fails_when_capacity_exceeded,
+    EnumParam(nullDstOverflow, 0, 1)
+    EnumParam(dstCapacity, 0, 1, 2, 3))
+  {
+    DataRegionSet* set = create_test_data_region_set(10, 0);
+    assert_add_data_region(set, 0, 99);
+    assert_add_data_region(set, 300, 399);
+    assert_add_data_region(set, 500, 599);
+    assert_add_data_region(set, 700, 799);
+    assert_add_data_region(set, 900, 999);
+    DataRegionSet* clone = clone_data_region_set(set);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    int* dstTooSmallPtr = nullDstOverflow ? NULL : &dstTooSmall;
+
+    DataRegion first = set->regions[1];
+    DataRegion last = set->regions[3];
+    DataRegion bounds = DR(first.first_index - 10, last.last_index + 10);
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, bounds, dstTooSmallPtr));
+    if(!nullDstOverflow)
+      assert_int_eq(1, dstTooSmall);
+
+    //Check that the set wasn't modified
+    assert_data_region_set_eq(clone, set);
+
+    gid_free(dst);
+    free_test_data_region_set(set);
+    free_clone_data_region_set(clone);
+  }
 
   Test(get_missing_data_regions_several_scenarios)
   {
-    assert_fail("Not Implemented");
+    DataRegionSet* set = create_test_data_region_set(100, 0);
+    size_t dstCapacity = 5;
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+    int dstTooSmall = 5;//Initial garbage value
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(0, 0), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(0, 0));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(1, 1), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(1, 1));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(0, 20), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(0, 20));
+
+    assert_add_data_region(set, 0, 20);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(0, 0), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(1, 1), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(0, 20), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(0, 21), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(21, 21));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(20, 21), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(21, 21));
+
+    assert_remove_data_region(set, 0, 5);
+
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, DR(0, 21), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(0, 5), DR(21,21));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(1, 19), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(1, 5));
+
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, DR(1, 29), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(1, 5), DR(21, 29));
+
+    assert_remove_data_region(set, 10, 10);
+
+    assert_int_eq(3, get_missing_data_regions(dst, dstCapacity, set, DR(1, 29), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(1, 5), DR(10, 10), DR(21, 29));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(0, 1), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(0, 1));
+
+    assert_int_eq(3, get_missing_data_regions(dst, dstCapacity, set, DR(0, 29), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(0, 5), DR(10, 10), DR(21, 29));
+
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, DR(0, 15), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(0, 5), DR(10, 10));
+
+    assert_int_eq(2, get_missing_data_regions(dst, dstCapacity, set, DR(1, 10), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(1, 5), DR(10, 10));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(21, 29), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(21, 29));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(10, 10), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(10, 10));
+
+    assert_int_eq(1, get_missing_data_regions(dst, dstCapacity, set, DR(1000, 1000), &dstTooSmall));
+    assert_int_eq(0, dstTooSmall);
+    assert_data_region_array_eq(dst, DR(1000, 1000));
+  }
+
+  Test(get_missing_data_regions_several_failure_scenarios,
+    EnumParam(dstCapacity, 0, 1, 2))
+  {
+    DataRegionSet* set = create_test_data_region_set(100, 0);
+    assert_add_data_region(set, 1, 1);
+    assert_add_data_region(set, 3, 5);
+    assert_add_data_region(set, 9, 10);
+    assert_add_data_region(set, 100, 199);
+    assert_add_data_region(set, 300, 399);
+    assert_add_data_region(set, 500, 599);
+    assert_add_data_region(set, 700, 799);
+    DataRegion* dst = gid_malloc(sizeof(DataRegion) * dstCapacity);
+
+    int dstTooSmall = 5;//Initial garbage value
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(0, 11), &dstTooSmall));
+    assert_int_eq(1, dstTooSmall);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(-1000, 1000), &dstTooSmall));
+    assert_int_eq(1, dstTooSmall);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(100, 799), &dstTooSmall));
+    assert_int_eq(1, dstTooSmall);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(99, 800), &dstTooSmall));
+    assert_int_eq(1, dstTooSmall);
+
+    assert_int_eq(0, get_missing_data_regions(dst, dstCapacity, set, DR(101, 701), &dstTooSmall));
+    assert_int_eq(1, dstTooSmall);
+
+    free_test_data_region_set(set);
+    gid_free(dst);
   }
 
 END_TEST_SUITE()
