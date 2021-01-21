@@ -18,6 +18,14 @@ typedef struct DataRegionSet
   int64_t total_length;
 } DataRegionSet;
 
+void internal_init_data_region_set(DataRegionSet* set, DataRegion* regions, int64_t capacity)
+{
+  set->regions = regions;
+  set->capacity = capacity;
+  set->count = 0;
+  set->total_length = 0;
+}
+
 DataRegionSet* create_data_region_set_in(void* dst, int64_t dstSize)
 {
   if(dst == NULL || dstSize < sizeof(DataRegionSet))
@@ -29,10 +37,7 @@ DataRegionSet* create_data_region_set_in(void* dst, int64_t dstSize)
     return NULL;
 
   DataRegionSet* set = dst;
-  set->regions = (DataRegion*)((uint8_t*)dst + sizeof(DataRegionSet));
-  set->capacity = numRegions;
-  set->count = 0;
-  set->total_length = 0;
+  internal_init_data_region_set(set, (DataRegion*)((uint8_t*)dst + sizeof(DataRegionSet)), numRegions);
   return set;
 }
 
@@ -371,10 +376,7 @@ int64_t get_missing_data_regions(DataRegion* dst, int64_t dstCapacity, const Dat
   }
 
   DataRegionSet dstSet;
-  dstSet.regions = dst;
-  dstSet.capacity = dstCapacity;
-  dstSet.count = 0;
-  //TODO: Make sure this is up to date on initialization (maybe create an init function), as we expect to add a 'total_length' field that should be initialized to zero here.
+  internal_init_data_region_set(&dstSet, dst, dstCapacity);
 
   if (add_data_region(&dstSet, boundaryRegion) == DATA_REGION_SET_SUCCESS)
   {
