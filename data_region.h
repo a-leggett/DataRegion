@@ -50,6 +50,37 @@ DataRegionSet* data_region_set_create(int64_t regionCapacity)
   return data_region_set_init_in(malloc(requiredSize), requiredSize);
 }
 
+int64_t data_region_set_count(const DataRegionSet* set)
+{
+  if(set == NULL)
+    return 0;
+  else
+    return set->count;
+}
+
+int64_t data_region_set_capacity(const DataRegionSet* set)
+{
+  if(set == NULL)
+    return 0;
+  else
+    return set->capacity;
+}
+
+const DataRegion* data_region_set_at(const DataRegionSet* set, int64_t index)
+{
+  if(set == NULL || index < 0 || index >= set->count)
+    return NULL;
+  return &set->regions[index];
+}
+
+int64_t data_region_set_total_length(const DataRegionSet* set)
+{
+  if(set == NULL)
+    return 0;
+  else
+    return set->total_length;
+}
+
 void data_region_set_free(DataRegionSet* set)
 {
   free(set);
@@ -99,14 +130,6 @@ DataRegion data_region_combine(DataRegion a, DataRegion b)
     ret.last_index = b.last_index;
 
   return ret;
-}
-
-int64_t data_region_set_total_length(const DataRegionSet* set)
-{
-  if(set == NULL)
-    return 0;
-  else
-    return set->total_length;
 }
 
 void _data_region_set_remove_at(DataRegionSet* set, int64_t index)

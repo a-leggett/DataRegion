@@ -5,19 +5,19 @@ DataRegionSet* init_test_data_region_set(DataRegionSet* set, int randCount)
 {
   for(int i = 0; i < randCount; i++)
   {
-    if(data_region_set_add(set, (DataRegion){.first_index = i*20, .last_index=(i*20)+9}) != DATA_REGION_SET_SUCCESS)
+    if(data_region_set_add(set, (DataRegion){.first_index = i*200, .last_index=(i*200)+99}) != DATA_REGION_SET_SUCCESS)
       return NULL;
   }
   return set;
 }
 
-#define create_test_data_region_set(capacity, randCount)                   \
-  init_test_data_region_set(                                               \
-    data_region_set_init_in(                                             \
-      gid_malloc(sizeof(DataRegionSet) + (sizeof(DataRegion) * capacity)), \
-      sizeof(DataRegionSet) + (sizeof(DataRegion) * capacity)              \
-    ),                                                                     \
-    randCount                                                              \
+#define create_test_data_region_set(capacity, randCount)                      \
+  init_test_data_region_set(                                                  \
+    data_region_set_init_in(                                                  \
+      gid_malloc(sizeof(DataRegionSet) + (sizeof(DataRegion) * (capacity))),  \
+      sizeof(DataRegionSet) + (sizeof(DataRegion) * (capacity))               \
+    ),                                                                        \
+    randCount                                                                 \
   )
 
 #define free_test_data_region_set(set) gid_free(set)
@@ -125,6 +125,89 @@ DataRegionSet* clone_data_region_set(const DataRegionSet* set)
     _local_total_length,                                                      \
     _local_actual_length);                                                    \
 }
+
+BEGIN_TEST_SUITE(Getters)
+
+  Test(data_region_set_count_when_set_NULL)
+  {
+    assert_int_eq(0, data_region_set_count(NULL));
+  }
+
+  Test(data_region_set_count_works,
+    EnumParam(count, 0, 1, 2, 3, 1000)
+    EnumParam(additionalCapacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(count + additionalCapacity, count);
+    assert_int_eq(count, data_region_set_count(set));
+    free_test_data_region_set(set);
+  }
+
+  Test(data_region_set_capacity_when_set_NULL)
+  {
+    assert_int_eq(0, data_region_set_capacity(NULL));
+  }
+
+  Test(data_region_set_capacity_works,
+    EnumParam(count, 0, 1, 2, 3, 1000)
+    EnumParam(additionalCapacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(count + additionalCapacity, count);
+    assert_int_eq(count + additionalCapacity, data_region_set_capacity(set));
+    free_test_data_region_set(set);
+  }
+
+  Test(data_region_set_at_when_set_NULL,
+    EnumParam(index, -100, -1, 0, 1, 2, 1000))
+  {
+    assert_null(data_region_set_at(NULL, index));
+  }
+
+  Test(data_region_set_at_when_index_out_of_bounds,
+    EnumParam(count, 0, 1, 2, 3, 1000)
+    EnumParam(additionalCapacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(count + additionalCapacity, count);
+    assert_null(data_region_set_at(set, -1));
+    assert_null(data_region_set_at(set, -1000));
+    assert_null(data_region_set_at(set, count));
+    assert_null(data_region_set_at(set, count + 1));
+    assert_null(data_region_set_at(set, count + additionalCapacity));
+    assert_null(data_region_set_at(set, count + additionalCapacity + 1));
+    assert_null(data_region_set_at(set, count + additionalCapacity + 1000));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(data_region_set_at_works,
+    EnumParam(count, 1, 2, 3, 1000)
+    EnumParam(additionalCapacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(count + additionalCapacity, count);
+
+    for(int64_t i = 0; i < count; i++)
+      assert_pointer_eq(&set->regions[i], data_region_set_at(set, i));
+
+    free_test_data_region_set(set);
+  }
+
+  Test(data_region_set_total_length_when_set_NULL)
+  {
+    assert_int_eq(0, data_region_set_total_length(NULL));
+  }
+
+  Test(data_region_set_total_length_works,
+    EnumParam(count, 1, 2, 3, 1000)
+    EnumParam(additionalCapacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(count + additionalCapacity, count);
+
+    int64_t expected = 100 * count;
+    assert_int_eq(expected, data_region_set_total_length(set));
+
+    free_test_data_region_set(set);
+  }
+
+END_TEST_SUITE()
 
 BEGIN_TEST_SUITE(DataRegionSetInitialization)
 
@@ -3235,6 +3318,7 @@ END_TEST_SUITE()
 
 int main()
 {
+  ADD_TEST_SUITE(Getters);
   ADD_TEST_SUITE(DataRegionSetInitialization);
   ADD_TEST_SUITE(DataRegionFunctionTests);
   ADD_TEST_SUITE(DataRegionSetFunctionTests);
