@@ -207,6 +207,37 @@ BEGIN_TEST_SUITE(Getters)
     free_test_data_region_set(set);
   }
 
+  Test(data_region_set_clear_NULL_has_no_effect)
+  {
+    data_region_set_clear(NULL);
+  }
+
+  Test(data_region_set_clear_works_when_empty,
+    EnumParam(capacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(capacity, 0);
+    data_region_set_clear(set);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, set->total_length);
+    free_test_data_region_set(set);
+  }
+
+  Test(data_region_set_clear_works_when_non_empty,
+    EnumParam(count, 1, 2, 3, 1000)
+    EnumParam(additionalCapacity, 0, 1, 2, 3, 1000))
+  {
+    DataRegionSet* set = create_test_data_region_set(count + additionalCapacity, count);
+    DataRegion* expectedRegions = set->regions;
+
+    data_region_set_clear(set);
+    assert_pointer_eq(expectedRegions, set->regions);
+    assert_int_eq(0, set->count);
+    assert_int_eq(0, set->total_length);
+    assert_int_eq(count + additionalCapacity, set->capacity);
+
+    free_test_data_region_set(set);
+  }
+
 END_TEST_SUITE()
 
 BEGIN_TEST_SUITE(DataRegionSetInitialization)

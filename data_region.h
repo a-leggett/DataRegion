@@ -146,6 +146,18 @@ int64_t data_region_set_total_length(const DataRegionSet* set)
     return set->total_length;
 }
 
+/* Clears all DataRegions from a DataRegionSet.
+ * @param set - Pointer to the DataRegionSet to clear.
+ *        If this argument is NULL, nothing will happen. */
+void data_region_set_clear(DataRegionSet* set)
+{
+  if(set != NULL)
+  {
+    set->count = 0;
+    set->total_length = 0;
+  }
+}
+
 /* Frees a DataRegionSet that was allocated by the 'data_region_set_create'
  * function.
  * @param set - Pointer to the DataRegionSet. If this argument is NULL, then
