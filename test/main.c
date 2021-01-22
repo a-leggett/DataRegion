@@ -452,20 +452,20 @@ BEGIN_TEST_SUITE(DataRegionFunctionTests);
     assert(data_region_intersects(b, a) != 0);
   }
 
-  Test(data_region_is_adjacent_false_when_far,
+  Test(data_region_are_adjacent_false_when_far,
     EnumParam(offset, -10000, -100, -2, -1, 0, 1, 2, 3, 100, 100000000))
   {
     DataRegion a = (DataRegion){.first_index = offset + 100, .last_index = offset + 199};
     DataRegion left = (DataRegion){.first_index = a.first_index - 1000, .last_index = a.first_index - 900};
     DataRegion right = (DataRegion){.first_index = a.last_index + 1000, .last_index = a.last_index + 1900};
 
-    assert(data_region_is_adjacent(a, left) == 0);
-    assert(data_region_is_adjacent(left, a) == 0);
-    assert(data_region_is_adjacent(a, right) == 0);
-    assert(data_region_is_adjacent(right, a) == 0);
+    assert(data_region_are_adjacent(a, left) == 0);
+    assert(data_region_are_adjacent(left, a) == 0);
+    assert(data_region_are_adjacent(a, right) == 0);
+    assert(data_region_are_adjacent(right, a) == 0);
   }
 
-  Test(data_region_is_adjacent_false_when_overlap,
+  Test(data_region_are_adjacent_false_when_overlap,
     EnumParam(offset, -10000, -100, -2, -1, 0, 1, 2, 3, 100, 100000000))
   {
     DataRegion inner = (DataRegion){.first_index = offset + 100, .last_index = offset + 199};
@@ -474,27 +474,27 @@ BEGIN_TEST_SUITE(DataRegionFunctionTests);
     DataRegion leftInner = (DataRegion){.first_index = inner.first_index+1, .last_index = inner.first_index + 5};
     DataRegion rightInner = (DataRegion){.first_index = inner.last_index - 5, .last_index = inner.last_index - 1};
 
-    assert(data_region_is_adjacent(inner, leftOverlap) == 0);
-    assert(data_region_is_adjacent(leftOverlap, inner) == 0);
-    assert(data_region_is_adjacent(inner, rightOverlap) == 0);
-    assert(data_region_is_adjacent(rightOverlap, inner) == 0);
-    assert(data_region_is_adjacent(inner, leftInner) == 0);
-    assert(data_region_is_adjacent(leftInner, inner) == 0);
-    assert(data_region_is_adjacent(inner, rightInner) == 0);
-    assert(data_region_is_adjacent(rightInner, inner) == 0);
+    assert(data_region_are_adjacent(inner, leftOverlap) == 0);
+    assert(data_region_are_adjacent(leftOverlap, inner) == 0);
+    assert(data_region_are_adjacent(inner, rightOverlap) == 0);
+    assert(data_region_are_adjacent(rightOverlap, inner) == 0);
+    assert(data_region_are_adjacent(inner, leftInner) == 0);
+    assert(data_region_are_adjacent(leftInner, inner) == 0);
+    assert(data_region_are_adjacent(inner, rightInner) == 0);
+    assert(data_region_are_adjacent(rightInner, inner) == 0);
   }
 
-  Test(data_region_is_adjacent_false_when_both_equal,
+  Test(data_region_are_adjacent_false_when_both_equal,
     EnumParam(offset, -10000, -100, -2, -1, 0, 1, 2, 3, 100, 100000000))
   {
     DataRegion a = (DataRegion){.first_index = offset + 100, .last_index = offset + 199};
     DataRegion b = (DataRegion){.first_index = offset + 100, .last_index = offset + 199};
 
-    assert(data_region_is_adjacent(a, b) == 0);
-    assert(data_region_is_adjacent(b, a) == 0);
+    assert(data_region_are_adjacent(a, b) == 0);
+    assert(data_region_are_adjacent(b, a) == 0);
   }
 
-  Test(data_region_is_adjacent_true_when_adjacent,
+  Test(data_region_are_adjacent_true_when_adjacent,
     EnumParam(offset, -10000, -100, -2, -1, 0, 1, 2, 3, 100, 100000000)
     EnumParam(adjLen, 1, 2, 3, 100))
   {
@@ -502,10 +502,10 @@ BEGIN_TEST_SUITE(DataRegionFunctionTests);
     DataRegion left = (DataRegion){.first_index = inner.first_index - adjLen, .last_index = inner.first_index - 1};
     DataRegion right = (DataRegion){.first_index = inner.last_index + 1, .last_index = inner.last_index + adjLen};
 
-    assert(data_region_is_adjacent(inner, left) != 0);
-    assert(data_region_is_adjacent(left, inner) != 0);
-    assert(data_region_is_adjacent(inner, right) != 0);
-    assert(data_region_is_adjacent(right, inner) != 0);
+    assert(data_region_are_adjacent(inner, left) != 0);
+    assert(data_region_are_adjacent(left, inner) != 0);
+    assert(data_region_are_adjacent(inner, right) != 0);
+    assert(data_region_are_adjacent(right, inner) != 0);
   }
 
   Test(data_region_can_combine_false_when_far,

@@ -206,7 +206,7 @@ int data_region_intersects(DataRegion a, DataRegion b)
  * @param b - The second DataRegion.
  * @returns - True (1) if 'a' ends immediatly before 'b' begins, or if
  *          'b' ends immediately before 'a' begins, otherwise false (0). */
-int data_region_is_adjacent(DataRegion a, DataRegion b)
+int data_region_are_adjacent(DataRegion a, DataRegion b)
 {
   return b.last_index == a.first_index - 1//'b' is left-adjacent to 'a'
     || b.first_index == a.last_index + 1;//'b' is right-adjacent to 'a'
@@ -223,7 +223,7 @@ int data_region_is_adjacent(DataRegion a, DataRegion b)
  * @see data_region_intersects */
 int data_region_can_combine(DataRegion a, DataRegion b)
 {
-  return data_region_is_adjacent(a, b) || data_region_intersects(a, b);
+  return data_region_are_adjacent(a, b) || data_region_intersects(a, b);
 }
 
 /* Checks whether a DataRegion is valid.
